@@ -1,0 +1,15 @@
+{
+  "name": "swrve-minimal-integration",
+  "version": "1.0.0",
+  "description": "A simple demo app ilustrating usage of the SDK bundle without any compilation steps. Only thing needed is to include the SDK bundle in the html.",
+  "private": true,
+  "scripts": {
+    "start": "http-server -o"
+  },
+  "devDependencies": {
+    "http-server": "^0.11.1"
+  },
+  "dependencies": {
+    "@swrve/smarttv-sdk": "^1.0.0"
+  }
+}

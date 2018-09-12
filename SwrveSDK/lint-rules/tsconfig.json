@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES6",
+    "lib": [
+        "es6"
+    ],
+    "strict": true,
+    "declaration": false
+  }
+}
