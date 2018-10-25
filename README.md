@@ -4,14 +4,9 @@ Swrve is a multi-channel customer engagement platform that provides hyper-target
 
 The Swrve SmartTV SDK enables your app to use all of these features.
 
-The SDK currently supports the following platforms:
-
-- Tizen
-- WebOS
-
 Getting started
 ---------------
-If you are deploying to a SmartTV OTT platform have a look at the quick integration guide at [https://docs.swrve.com/developer-documentation/integration/ott/smart-tv](https://docs.swrve.com/developer-documentation/integration/ott/smart-tv)
+If you are deploying to a SmartTV OTT platform have a look at the quick integration guide at [http://docs.swrve.com/developer-documentation/integration/ott/smart-tv](http://docs.swrve.com/developer-documentation/integration/ott/smart-tv)
 
 Installing using NPM
 ------------------

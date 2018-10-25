@@ -1,6 +1,6 @@
 import { version } from "../../package.json";
 
-export const sdkVersion = version;
+export const sdkVersion = "SmartTV " + version;
 
 export const SWRVE_DEVICE_NAME = "swrve.device_name";
 export const SWRVE_OS = "swrve.os";

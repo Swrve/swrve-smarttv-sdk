@@ -566,7 +566,7 @@ export class SwrveInternal {
         const type = String(button.type.value);
         const action = String(button.action.value);
 
-        this.queueEvent(this.eventFactory.getButtonClickEvent(this.profileManager.getNextSequenceNumber(), button.name));
+        this.queueEvent(this.eventFactory.getButtonClickEvent(this.profileManager.getNextSequenceNumber(), parentCampaign.id, button.name));
 
         if (this.profileManager.isQAUser()) {
             let logType;
