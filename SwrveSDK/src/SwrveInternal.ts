@@ -57,6 +57,7 @@ export class SwrveInternal {
     private installDate: string = "";
     private identifyNetworkMonitorHandle?: NetworkListener;
     private campaignNetworkMonitorHandle?: NetworkListener;
+    private identifiedOnAnotherDevice: boolean = false;
 
     public constructor(config: Readonly<ISwrveConfig>, dependencies?: IDependencies) {
         dependencies = dependencies || {};
@@ -101,7 +102,7 @@ export class SwrveInternal {
         if (this.isIdentifyCallPending()) {
             const externalId = StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING_EXTERNAL_ID)!;
             const swrveId = StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING)!;
-            this.makeIdentityCall(externalId, swrveId, () => this.initSDK());
+            this.makeIdentityCall(externalId, this.profileManager.currentUser.userId, swrveId, () => this.initSDK());
         } else {
             this.initSDK();
         }
@@ -277,6 +278,8 @@ export class SwrveInternal {
         this.sendQueuedEvents();
         this.pauseSDK = true;
 
+        const previousSwrveId: string = this.profileManager.currentUser.userId;
+
         if (thirdPartyLoginId === "" || thirdPartyLoginId == null) {
             this.createAnonymousUser();
             this.startNewSession();
@@ -290,12 +293,13 @@ export class SwrveInternal {
                 this.switchUser(cachedSwrveUserId);
             }
         } else {
-            if (!this.profileManager.currentUser.isAnonymous) {
+            if (ProfileManager.isUserIdVerified(this.profileManager.currentUser.userId)
+                || (!this.profileManager.currentUser.isAnonymous)) {
                 this.createAnonymousUser();
             }
-
+            
             const swrveId = this.profileManager.currentUser.userId;
-            this.makeIdentityCall(thirdPartyLoginId, swrveId, onIdentifyError);
+            this.makeIdentityCall(thirdPartyLoginId, previousSwrveId, swrveId, onIdentifyError);
         }
     }
 
@@ -465,27 +469,32 @@ export class SwrveInternal {
         }
     }
 
-    private makeIdentityCall(thirdPartyLoginId: string, swrveId: string, onIdentifyError: OnIdentifyErrorCallback): void {
+    private makeIdentityCall(thirdPartyLoginId: string, previousSwrveId: string, 
+                             swrveId: string, onIdentifyError: OnIdentifyErrorCallback): void {
+        this.identifiedOnAnotherDevice =  false; // reset the flag
         this.restClient.identify(thirdPartyLoginId, swrveId)
             .then((response) => {
                 this.profileManager.cacheThirdPartyId(thirdPartyLoginId, response.swrve_id);
                 if (response.status === SwrveConstants.NEW_EXTERNAL_ID ||
                     response.status === SwrveConstants.EXISTING_EXTERNAL_ID_MATCHES_SWRVE_ID) {
                     this.pauseSDK = false;
-                    if (this.profileManager.currentUser.userId !== swrveId) {
-                        this.switchUser(swrveId);
+                    if (previousSwrveId !== response.swrve_id) {
+                        this.switchUser(response.swrve_id);
                     }
                 } else if (response.status === SwrveConstants.EXISTING_EXTERNAL_ID) {
+                    this.identifiedOnAnotherDevice =  true;
                     this.switchUser(response.swrve_id);
                 }
 
                 if (this.isIdentifyCallPending()) {
                     this.cleanUpIdentifyCallPending();
                 }
+                
+                ProfileManager.setUserIdAsVerified(this.profileManager.currentUser.userId);
             })
             .catch(error => {
                 SwrveLogger.info("Identify error" + error);
-                this.handleIdentifyOffline(thirdPartyLoginId, swrveId, onIdentifyError);
+                this.handleIdentifyOffline(thirdPartyLoginId, previousSwrveId, swrveId, onIdentifyError);
 
                 this.pauseSDK = false;
                 if (onIdentifyError) {
@@ -494,7 +503,8 @@ export class SwrveInternal {
             });
     }
 
-    private handleIdentifyOffline(thirdPartyLoginId: string, swrveId: string, onIdentifyError: OnIdentifyErrorCallback): void {
+    private handleIdentifyOffline(thirdPartyLoginId: string, previousSwrveId: string, 
+                                  swrveId: string, onIdentifyError: OnIdentifyErrorCallback): void {
         const existingThirdPartyLoginId = StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING_EXTERNAL_ID);
         if (existingThirdPartyLoginId && existingThirdPartyLoginId !== thirdPartyLoginId) {
             this.evtManager.clearQueueAndStorage(this.profileManager.currentUser.userId);
@@ -506,8 +516,8 @@ export class SwrveInternal {
             this.identifyNetworkMonitorHandle = this.platform.monitorNetwork((state: number) => {
                 if (state === NETWORK_CONNECTED) {
                     SwrveLogger.info("connected");
-                    this.makeIdentityCall(StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING_EXTERNAL_ID)!,
-                        swrveId, onIdentifyError);
+                    this.makeIdentityCall(StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING_EXTERNAL_ID)!, 
+                    previousSwrveId, swrveId, onIdentifyError);
                 }
             });
         }
@@ -546,6 +556,7 @@ export class SwrveInternal {
 
     private switchUser(newUserId: string): void {
         this.profileManager.setCurrentUser(newUserId);
+        ProfileManager.setUserIdAsVerified(newUserId);
         this.campaignManager.loadStoredCampaigns(newUserId);
         this.startNewSession();
     }
@@ -757,12 +768,13 @@ export class SwrveInternal {
         const currentUser = this.profileManager.currentUser;
         if (currentUser.firstUse === 0 || currentUser.firstUse === undefined) {
             this.profileManager.firstUse = getTimestampSeconds(Date.now());
-
-            const evt = this.eventFactory.getFirstInstallEvent(this.profileManager.firstUse, 0);
-            this.queueEvent(evt);
-
-            if (this.profileManager.isQAUser()) {
-                this.queueEvent(this.eventFactory.getWrappedFirstInstallEvent(evt));
+            if (this.identifiedOnAnotherDevice === false) {
+                const evt = this.eventFactory.getFirstInstallEvent(this.profileManager.firstUse, 0);
+                this.queueEvent(evt);
+    
+                if (this.profileManager.isQAUser()) {
+                    this.queueEvent(this.eventFactory.getWrappedFirstInstallEvent(evt));
+                }
             }
         }
     }

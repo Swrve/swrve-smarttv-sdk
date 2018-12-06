@@ -58,24 +58,38 @@ export class ProfileManager
         return StorageManager.getData(SWRVE_USER_ID);
     }
 
+    public static isUserIdVerified(userId: string): boolean {
+        const verified = StorageManager.getData("verified-" + userId);
+        if (verified) {
+            return true;
+        }
+        return false;
+    }
+
+    public static setUserIdAsVerified(userId: string): void {
+        if (!this.isUserIdVerified(userId)) {
+            StorageManager.saveData("verified-" + userId, "VERIFIED");
+        }
+    }
+
     public setCurrentUserAsNewAnonymousUser(): void {
         const newAnonUserId = generateUuid().toString();
         this.setCurrentUser(newAnonUserId, true);
     }
 
-    public setCurrentUser(userId: string, markAsAnonymous: boolean = false): void {
-        const session_token = getSessionToken(this.userId, this.appId, this.apiKey, new Date());
-        const currentUser = StorageManager.getData(userId);
+    public setCurrentUser(newUserId: string, markAsAnonymous: boolean = false): void {
+        const session_token = getSessionToken(newUserId, this.appId, this.apiKey, new Date());
+        const currentUser = StorageManager.getData(newUserId);
 
         if (currentUser) {
             this._currentUser = JSON.parse(currentUser);
-            this.restoreCurrentUser(session_token, userId);
+            this.restoreCurrentUser(session_token, newUserId);
         } else {
-            this._currentUser = {userId, sessionToken: session_token, sessionStart: Date.now(),
+            this._currentUser = {userId: newUserId, sessionToken: session_token, sessionStart: Date.now(),
                 isQAUser: false, nextSeqNum: 1, firstUse: 0, isAnonymous: markAsAnonymous};
         }
 
-        StorageManager.saveData(userId, JSON.stringify(this._currentUser));
+        StorageManager.saveData(newUserId, JSON.stringify(this._currentUser));
         StorageManager.saveData(SWRVE_USER_ID, this.currentUser.userId);
     }
 
