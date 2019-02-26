@@ -67,8 +67,9 @@ export class SwrveRestClient {
 
     public identify(thirdPartyLoginId: string, swrveId: string): Promise<IdentityResponse> {
         const appId = this.config.appId;
+        const stack = this.config.stack === "us" ? "identity" : "eu-identity"; 
         const url = this.config.identityUrl == null
-            ? `https://${appId}.identity.swrve.com/identify`
+            ? `https://${appId}.${stack}.swrve.com/identify`
             : this.config.identityUrl;
         const body: IIdentityParams = {
             api_key: this.config.apiKey,
