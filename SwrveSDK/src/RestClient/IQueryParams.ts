@@ -1,5 +1,4 @@
-export interface IQueryParams
-{
+export interface IQueryParams {
     api_key: string;
     user: string;
     app_version?: string;
@@ -12,6 +11,8 @@ export interface IQueryParams
     device_dpi: string;
     device_name: string;
     os_version: string;
+    os: string;
+    device_type: string;
     orientation: string;
     etag?: string;
 }

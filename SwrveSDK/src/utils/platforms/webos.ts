@@ -1,7 +1,11 @@
 import BasePlatform from "./base";
 import { IKeyMapping } from "./IKeymapping";
 import {
-    DevicePropertyName, IPlatformName, NetworkMonitorHandle, NETWORK_DISCONNECTED, NETWORK_CONNECTED,
+    DevicePropertyName,
+    IPlatformName,
+    NetworkMonitorHandle,
+    NETWORK_DISCONNECTED,
+    NETWORK_CONNECTED,
 } from "./IPlatform";
 import SwrveLogger from "../SwrveLogger";
 
@@ -19,7 +23,7 @@ const webOSMapping = {
     415: "Play",
     19: "Pause",
     461: "Back",
-  };
+};
 
 export default class WebOSPlatform extends BasePlatform {
     public name(): IPlatformName {
@@ -31,9 +35,10 @@ export default class WebOSPlatform extends BasePlatform {
 
     public init(deviceProperties: ReadonlyArray<DevicePropertyName> = []): Promise<void> {
         super.init(deviceProperties);
-        return deviceProperties
-            .reduce((promise, property) => promise.then(() => this.getDeviceProperty(property)),
-                Promise.resolve());
+        return deviceProperties.reduce(
+            (promise, property) => promise.then(() => this.getDeviceProperty(property)),
+            Promise.resolve(),
+        );
     }
 
     public getKeymapping(): IKeyMapping {
@@ -59,12 +64,12 @@ export default class WebOSPlatform extends BasePlatform {
     }
 
     public get os(): string {
-        return "webOS";
+        return "webos";
     }
 
     public get model(): string {
         return this._model || "";
-      }
+    }
 
     public get firmware(): string {
         return this._firmware || "";
@@ -92,7 +97,7 @@ export default class WebOSPlatform extends BasePlatform {
                 webOS.service.request("luna://com.palm.systemservice", {
                     method: "time/getSystemTime",
                     onSuccess: (response: webOS.SystemTimeInfo) => {
-                        resolve(this._timezone = response.timezone);
+                        resolve((this._timezone = response.timezone));
                     },
                     onFailure: reject,
                 }),
@@ -164,18 +169,18 @@ export default class WebOSPlatform extends BasePlatform {
 
     private loadSystemInfo(): Promise<void> {
         return new Promise((resolve, reject) =>
-        webOS.service.request("luna://com.webos.service.tv.systemproperty", {
-            method: "getSystemInfo",
-            parameters: {
-                keys: ["modelName", "firmwareVersion"],
-            },
-            onSuccess: (response: webOS.SystemProperties) => {
-                this._model = response.modelName;
-                this._firmware = response.firmwareVersion;
-                resolve();
-            },
-            onFailure: reject,
-        }),
-    );
+            webOS.service.request("luna://com.webos.service.tv.systemproperty", {
+                method: "getSystemInfo",
+                parameters: {
+                    keys: [ "modelName", "firmwareVersion" ],
+                },
+                onSuccess: (response: webOS.SystemProperties) => {
+                    this._model = response.modelName;
+                    this._firmware = response.firmwareVersion;
+                    resolve();
+                },
+                onFailure: reject,
+            }),
+        );
     }
 }
