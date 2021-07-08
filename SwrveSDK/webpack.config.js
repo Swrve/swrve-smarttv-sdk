@@ -38,6 +38,7 @@ module.exports = function(env) {
             filename: 'SwrveSDK.js',
             path: path.resolve(__dirname, 'dist'),
             library: 'SwrveSDK',
+            libraryTarget: 'umd'
         },
     };
 };
