@@ -14,6 +14,7 @@ import {
     SWRVE_TIMEZONE_NAME,
     sdkVersion,
     SWRVE_DEVICE_NAME,
+    SWRVE_DEVICE_TYPE,
 } from "./SwrveConstants";
 import {ProfileManager} from "../Profile/ProfileManager";
 import {IPlatform} from "./platforms/IPlatform";
@@ -36,6 +37,7 @@ export function queryDeviceProperties(platform: IPlatform, profileManager: Profi
         [SWRVE_DEVICE_NAME]: `${platform.name().variation} ${platform.model}`,
         [SWRVE_APP_STORE]: platform.appStore,
         [SWRVE_INSTALL_DATE]: installDate,
+        [SWRVE_DEVICE_TYPE]: "tv",
     };
 
     return deviceProperties;

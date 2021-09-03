@@ -23,6 +23,7 @@ export const SWRVE_CAMPAIGN_STATUS_UNSEEN = "unseen";
 export const SWRVE_CAMPAIGN_STATUS_SEEN = "seen";
 export const SWRVE_CAMPAIGN_STATUS_DELETED = "deleted";
 export const SWRVE_AUTOSHOW_AT_SESSION_START_TRIGGER = "Swrve.Messages.showAtSessionStart";
+export const SWRVE_DEVICE_TYPE = "swrve.device_type";
 
 //button actions
 export const DISMISS = "DISMISS";

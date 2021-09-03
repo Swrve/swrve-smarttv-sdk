@@ -43,6 +43,7 @@ export class SwrveMessageDisplayManager {
     private screenCenterHeight: number = 0;
     private onButtonClickedCallback: OnButtonClicked | null = null;
     private isOpen: boolean = false;
+    private justClosed: boolean = false;
     private focusManager?: SwrveFocusManager<IAMButton>;
     private resourceManager?: ResourceManager;
     private normalStyle?: ICSSStyle | string;
@@ -88,6 +89,7 @@ export class SwrveMessageDisplayManager {
         }
 
         this.isOpen = false;
+        this.justClosed = true;
         delete this.focusManager;
     }
 
@@ -107,10 +109,26 @@ export class SwrveMessageDisplayManager {
         }
     }
 
+    private onKeyup = (ev: KeyboardEvent) => {
+        // Closing the message will fire up one last "keyup" event
+        // This prevents that keyup event from spreading down to the app
+        if (this.justClosed) {
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            this.justClosed = false;
+            return;
+        }
+    }
+
     private initListener(): void {
         window.addEventListener(
             "keydown",
             this.onKeydown,
+            true,
+        );
+        window.addEventListener(
+            "keyup",
+            this.onKeyup,
             true,
         );
     }
