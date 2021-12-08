@@ -175,7 +175,17 @@ export class CampaignManager
 
     public showCampaign(campaign: ISwrveCampaign): boolean {
         if (campaign.messages && campaign.messages.length > 0) {
-            this.messageDisplayManager.showMessage(campaign.messages[0], campaign, this.assetManager.ImagesCDN, this.platform);
+            const message = campaign.messages[0];
+            message.parentCampaign = campaign.id;
+    
+            this.messageDisplayManager.showMessage(
+              campaign.messages[0],
+              campaign,
+              this.assetManager.ImagesCDN,
+              this.platform,
+            );
+      
+            this.handleImpression(message, () => {} );
             return true;
         } else {
             return false;
@@ -355,14 +365,15 @@ export class CampaignManager
                 campaignState.impressions++;
                 campaignState.status = "seen";
                 campaignState.lastShownTime = Date.now();
-
-                StorageManager.saveData(CAMPAIGN_STATE + this.profileManager.currentUser.userId, JSON.stringify(campaignState));
-
+                this.campaignState[parentCampaign.id] = campaignState;
+                
+                StorageManager.saveData(
+                  CAMPAIGN_STATE + this.profileManager.currentUser.userId,
+                  JSON.stringify(this.campaignState),
+                );
+        
                 impressionCallback(message);
-
                 this.messagesShownCount++;
-
-                break;
             }
         }
     }
