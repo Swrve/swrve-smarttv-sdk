@@ -19,6 +19,7 @@ export interface ISwrveInternalConfig
     readonly autoShowMessagesMaxDelay?: number;
     readonly inAppMessageButtonStyle?: Readonly<ICSSStyle> | string;
     readonly inAppMessageButtonFocusStyle?: Readonly<ICSSStyle> | string;
+    readonly inAppMessageStyleOverride?: string;
 }
 
 export function validateConfig(config: ISwrveInternalConfig): void {

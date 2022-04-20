@@ -15,6 +15,7 @@ export default interface ISwrveConfig {
     autoShowMessagesMaxDelay?: number;
     inAppMessageButtonStyle?: ICSSStyle | string;
     inAppMessageButtonFocusStyle?: ICSSStyle | string;
+    inAppMessageStyleOverride?: string;
 }
 
 export interface ICSSStyle {

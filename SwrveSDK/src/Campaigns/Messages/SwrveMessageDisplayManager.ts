@@ -2,7 +2,7 @@ import {
     ISwrveButton, ISwrveCampaign, ISwrveFormat, ISwrveImage, ISwrveMessage,
 } from "../ISwrveCampaign";
 import {IPlatform} from "../../utils/platforms/IPlatform";
-import {SWRVE_IAM_CONTAINER} from "../../utils/SwrveConstants";
+import {DEFAULT_IAM_STYLE, IAM_CSS_CLASS_NAME, SWRVE_IAM_CONTAINER} from "../../utils/SwrveConstants";
 import SwrveFocusManager from "../../UIElements/SwrveFocusManager";
 import {ISwrveInternalConfig} from "../../Config/ISwrveInternalConfig";
 import {IKeyMapping} from "../../utils/platforms/IKeymapping";
@@ -48,11 +48,13 @@ export class SwrveMessageDisplayManager {
     private resourceManager?: ResourceManager;
     private normalStyle?: ICSSStyle | string;
     private focusStyle?: ICSSStyle | string;
+    private overrideIAMStyle?: string;
     private keymap: IKeyMapping;
 
     constructor(platform: IPlatform, config?: ISwrveInternalConfig, resourceManager?: ResourceManager) {
         this.normalStyle = config && config.inAppMessageButtonStyle;
         this.focusStyle = config && config.inAppMessageButtonFocusStyle;
+        this.overrideIAMStyle = config && config.inAppMessageStyleOverride;
 
         this.keymap = platform.getKeymapping();
         this.resourceManager = resourceManager;
@@ -155,9 +157,9 @@ export class SwrveMessageDisplayManager {
         const iamContainer = document.createElement("div");
 
         iamContainer.id = SWRVE_IAM_CONTAINER;
-        iamContainer.className = name;
-        iamContainer.style.position = "absolute";
-        iamContainer.style.zIndex = "2147483647";
+        iamContainer.className = IAM_CSS_CLASS_NAME;
+
+        iamContainer.innerHTML = this.overrideIAMStyle || DEFAULT_IAM_STYLE;
         iamContainer.style.backgroundColor = color || "";
 
         document.body.appendChild(iamContainer);

@@ -173,7 +173,7 @@ export class CampaignManager
         this.messageDisplayManager.onButtonClicked(callback);
     }
 
-    public showCampaign(campaign: ISwrveCampaign): boolean {
+    public showCampaign(campaign: ISwrveCampaign, impressionCallback?: OnMessageListener): boolean {
         if (campaign.messages && campaign.messages.length > 0) {
             const message = campaign.messages[0];
             message.parentCampaign = campaign.id;
@@ -184,6 +184,10 @@ export class CampaignManager
               this.assetManager.ImagesCDN,
               this.platform,
             );
+
+            if (impressionCallback) {
+                impressionCallback(message);
+            }
       
             this.handleImpression(message, () => {} );
             return true;

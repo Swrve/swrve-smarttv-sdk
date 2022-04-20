@@ -423,7 +423,7 @@ export class SwrveInternal {
     //*****************************************************************************************************************/
 
     public showCampaign(campaign: ISwrveCampaign): boolean {
-        return this.campaignManager.showCampaign(campaign);
+        return this.campaignManager.showCampaign(campaign , (msg) => { this.handleMessage(msg); });
     }
 
     public shutdown(): void {

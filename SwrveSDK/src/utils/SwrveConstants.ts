@@ -65,3 +65,17 @@ export const INVALID_EVENT_NAME = "Event name may not contain the word Swrve.";
 export const INVALID_EVENT_LENGTH = "Event name may not be more than 191 characters.";
 export const INVALID_SPACES = "Event name may not include spaces.";
 export const NO_SYNCHRONOUS_STORAGE = "Local Storage is not available.";
+
+export const IAM_CSS_CLASS_NAME = "swrve-iam";
+export const DEFAULT_IAM_STYLE = `
+        <style>
+        .${IAM_CSS_CLASS_NAME} {
+          position: fixed;
+          left: 0;
+          top: 0;
+          height: 100vh;
+          width: 100vw;
+          z-index: 1050;
+        }
+    </style>
+`;
