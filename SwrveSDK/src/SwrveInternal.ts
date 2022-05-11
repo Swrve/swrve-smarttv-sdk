@@ -92,7 +92,7 @@ export class SwrveInternal {
         ProfileManager.storeUserId(this.config.userId);
 
         this.addLifecycleListeners();
-        this.platform.init(["language", "countryCode", "timezone", "firmware"])
+        this.platform.init(["language", "countryCode", "timezone", "firmware", "deviceHeight", "deviceWidth"])
             .then(() => {
                 if (!this._shutdown) {
                     this.queueDeviceProperties();
@@ -103,6 +103,9 @@ export class SwrveInternal {
             const externalId = StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING_EXTERNAL_ID)!;
             const swrveId = StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING)!;
             this.makeIdentityCall(externalId, this.profileManager.currentUser.userId, swrveId, () => this.initSDK());
+        } else if (this.config.managedMode) {
+            SwrveLogger.debug("SwrveSDK: This application has started Swrve in MANAGED mode. Call start() to begin tracking");
+            this.stop();
         } else {
             this.initSDK();
         }
@@ -275,6 +278,11 @@ export class SwrveInternal {
     }
 
     public identify(thirdPartyLoginId: string | null, onIdentifyError: OnIdentifyErrorCallback): void {
+        if (this.config.managedMode) {
+            SwrveLogger.error("SwrveSDK: identify() cannot be called when MANAGED mode is enabled. Use start() instead.");
+            return;
+        }
+
         this.sendQueuedEvents();
         this.pauseSDK = true;
 
@@ -290,7 +298,7 @@ export class SwrveInternal {
         if (cachedSwrveUserId) {
             this.pauseSDK = false;
             if (cachedSwrveUserId !== this.profileManager.currentUser.userId) {
-                this.switchUser(cachedSwrveUserId);
+                this.verifyAndSwitchUser(cachedSwrveUserId);
             }
         } else {
             if (ProfileManager.isUserIdVerified(this.profileManager.currentUser.userId)
@@ -422,6 +430,43 @@ export class SwrveInternal {
 
     //*****************************************************************************************************************/
 
+    public start(userId?: string): void {
+        if (this.config.managedMode) {
+            if (userId) {
+                if (this.profileManager.currentUser.userId === userId) {
+                    if (this.pauseSDK) {
+                        this.pauseSDK = false;
+                        this.initSDK();
+                    } else {
+                        SwrveLogger.info("SwrveSDK: Already running on userID: " + userId);
+                    }
+                } else {
+                    this.stopAndSwitchUser(userId);
+                }   
+            } else if (this.pauseSDK) {
+                this.pauseSDK = false;
+                this.initSDK();
+            } else {
+                SwrveLogger.info("SwrveSDK: Already running on userID: " + this.profileManager.currentUser.userId);
+            }
+        } else {
+            SwrveLogger.error("SwrveSDK: start() can only be called when managedMode in SwrveConfig is enabled");
+        }
+    }
+
+    public stopAndSwitchUser(userId: string): void {
+        if (this.config.managedMode) {
+            this.stop();
+            this.switchUser(userId);
+        } else {
+            SwrveLogger.error("SwrveSDK: switchUser() can only be called when managedMode in SwrveConfig is enabled");
+        }
+    }
+
+    public isSDKStarted(): boolean {
+        return !this.pauseSDK;
+    }
+
     public showCampaign(campaign: ISwrveCampaign): boolean {
         return this.campaignManager.showCampaign(campaign , (msg) => { this.handleMessage(msg); });
     }
@@ -479,11 +524,11 @@ export class SwrveInternal {
                     response.status === SwrveConstants.EXISTING_EXTERNAL_ID_MATCHES_SWRVE_ID) {
                     this.pauseSDK = false;
                     if (previousSwrveId !== response.swrve_id) {
-                        this.switchUser(response.swrve_id);
+                        this.verifyAndSwitchUser(response.swrve_id);
                     }
                 } else if (response.status === SwrveConstants.EXISTING_EXTERNAL_ID) {
                     this.identifiedOnAnotherDevice =  true;
-                    this.switchUser(response.swrve_id);
+                    this.verifyAndSwitchUser(response.swrve_id);
                 }
 
                 if (this.isIdentifyCallPending()) {
@@ -554,9 +599,13 @@ export class SwrveInternal {
         this.campaignManager.resetCampaignState();
     }
 
+    private verifyAndSwitchUser(newUserId: string): void {
+        ProfileManager.setUserIdAsVerified(newUserId);
+        this.switchUser(newUserId);
+    }
+
     private switchUser(newUserId: string): void {
         this.profileManager.setCurrentUser(newUserId);
-        ProfileManager.setUserIdAsVerified(newUserId);
         this.campaignManager.loadStoredCampaigns(newUserId);
         this.startNewSession();
     }
@@ -682,7 +731,6 @@ export class SwrveInternal {
         this.checkFirstUserInitiated();
         this.disableAutoShowAfterDelay();
         this.sendQueuedEvents(this.profileManager.currentUser.userId, true);
-
         SwrveLogger.info("Swrve Config: ", this.config);
     }
 

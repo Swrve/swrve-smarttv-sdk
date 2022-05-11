@@ -144,6 +144,14 @@ export class SwrveSDK {
 
     //*************************************** Lifecycle Management ************************************//
 
+    public static start(userId?: string): void {
+        SwrveSDK.checkInstance().start(userId);
+    }
+
+    public static isStarted(): boolean {
+       return SwrveSDK.checkInstance().isSDKStarted();
+    }
+
     public static shutdown(): void {
         SwrveSDK.checkInstance().shutdown();
 

@@ -16,6 +16,7 @@ export default interface ISwrveConfig {
     inAppMessageButtonStyle?: ICSSStyle | string;
     inAppMessageButtonFocusStyle?: ICSSStyle | string;
     inAppMessageStyleOverride?: string;
+    managedMode?: boolean;
 }
 
 export interface ICSSStyle {

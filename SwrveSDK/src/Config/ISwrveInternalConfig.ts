@@ -20,6 +20,7 @@ export interface ISwrveInternalConfig
     readonly inAppMessageButtonStyle?: Readonly<ICSSStyle> | string;
     readonly inAppMessageButtonFocusStyle?: Readonly<ICSSStyle> | string;
     readonly inAppMessageStyleOverride?: string;
+    readonly managedMode?: boolean;
 }
 
 export function validateConfig(config: ISwrveInternalConfig): void {

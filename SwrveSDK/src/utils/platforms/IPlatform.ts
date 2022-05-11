@@ -6,7 +6,7 @@ export interface IPlatformName {
     readonly variation: string;
 }
 
-export type DevicePropertyName = "language" | "countryCode" | "timezone" | "firmware";
+export type DevicePropertyName = "language" | "countryCode" | "timezone" | "firmware" | "deviceHeight" | "deviceWidth";
 
 export type NetworkStatus = number;
 

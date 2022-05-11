@@ -122,20 +122,6 @@ export default class SamsungPlatform extends BasePlatform {
         return this._countryCode || "";
     }
 
-    public get screenHeight(): number {
-        if (this._screenHeight === undefined) {
-            this._screenHeight = tizen.systeminfo.getCapability("http://tizen.org/feature/screen.height");
-        }
-        return this._screenHeight || 0;
-    }
-
-    public get screenWidth(): number {
-        if (this._screenWidth === undefined) {
-            this._screenWidth = tizen.systeminfo.getCapability("http://tizen.org/feature/screen.width");
-        }
-        return this._screenWidth || 0;
-    }
-
     public get appStore(): string {
         return "tizen";
     }
@@ -168,6 +154,20 @@ export default class SamsungPlatform extends BasePlatform {
         }
         return Promise.resolve(this._countryCode || "");
     }
+    
+    public getScreenHeight(): Promise<number> {
+        if (this._screenHeight === undefined) {
+            return this.loadDisplay().then(() => this._screenHeight || 1080);
+        }
+        return Promise.resolve(this._screenHeight || 1080);
+    }
+
+    public getScreenWidth(): Promise<number> {
+        if (this._screenWidth === undefined) {
+            return this.loadDisplay().then(() => this._screenWidth || 1920);
+        }
+        return Promise.resolve(this._screenWidth || 1920);
+    }
 
     public getKeymapping(): IKeyMapping {
         return tizenMapping;
@@ -197,6 +197,10 @@ export default class SamsungPlatform extends BasePlatform {
                 return this.getLanguage();
             case "countryCode":
                 return this.getCountryCode();
+            case "deviceHeight":
+                return this.getScreenHeight();
+            case "deviceWidth":
+                return this.getScreenWidth();
             default:
                 return undefined;
         }
@@ -207,7 +211,17 @@ export default class SamsungPlatform extends BasePlatform {
             tizen.systeminfo.getPropertyValue("LOCALE", (result) => {
                 this._language = result.language.split("_")[0];
                 this._countryCode = result.country.replace(/\..*$/, "").split("_")[1].toLowerCase();
-                resolve();
+                resolve(result);
+            }),
+        );
+    }
+
+    private loadDisplay(): Promise<any> {
+        return new Promise((resolve, reject) => 
+            tizen.systeminfo.getPropertyValue("DISPLAY", (result) => {
+                this._screenHeight = (result.resolutionHeight > 0) ? result.resolutionHeight : 1080;
+                this._screenWidth = (result.resolutionWidth > 0) ? result.resolutionWidth : 1920;
+                resolve(result);
             }),
         );
     }
