@@ -31,7 +31,9 @@ import IRestResponse from "./RestClient/IRestResponse";
 import IReadonlyDictionary from "./utils/IReadonlyDictionary";
 import IReward from "./WebApi/Events/IReward";
 import SwrveEvent from "./WebApi/Events/SwrveEvent";
-import { getInstallDateFormat, getTimestampSeconds } from "./utils/TimeHelper";
+import DateHelper from "./utils/DateHelper";
+import { getInstallDateFormat } from "./utils/TimeHelper";
+import { CAMPAIGN_STATE } from "./utils/SwrveConstants";
 
 export class SwrveInternal {
     public readonly profileManager: ProfileManager;
@@ -75,7 +77,14 @@ export class SwrveInternal {
 
         this.resourceManager = new ResourceManagerInternal();
 
-        this.profileManager = dependencies.profileManager || new ProfileManager(this.config.userId, this.config.appId, this.config.apiKey);
+        this.profileManager = 
+            dependencies.profileManager || 
+            new ProfileManager(
+                this.config.userId, 
+                this.config.appId, 
+                this.config.apiKey, 
+                this.config.newSessionInterval,
+                );
 
         this.campaignManager = dependencies.campaignManager
             || new CampaignManager(this.profileManager, this.platform, this.config, this.getResourceManager());
@@ -91,7 +100,14 @@ export class SwrveInternal {
     public init(): void {
         ProfileManager.storeUserId(this.config.userId);
 
-        this.addLifecycleListeners();
+        window.onbeforeunload = (): void => {
+            this.pageStateHandler();
+            this.shutdown();
+          };
+        window.onblur = (): void => {
+           this.pageStateHandler();
+        };
+
         this.platform.init(["language", "countryCode", "timezone", "firmware", "deviceHeight", "deviceWidth"])
             .then(() => {
                 if (!this._shutdown) {
@@ -131,7 +147,11 @@ export class SwrveInternal {
 
         this.validateEventName(keyName);
 
-        const evt = this.eventFactory.getNamedEvent(keyName, payload, this.profileManager.getNextSequenceNumber(), Date.now());
+        const evt = this.eventFactory.getNamedEvent(
+            keyName, 
+            payload, 
+            this.profileManager.getNextSequenceNumber(), 
+            DateHelper.nowInUtcTime());
 
         this.queueEvent(evt);
 
@@ -148,7 +168,12 @@ export class SwrveInternal {
 
         this.validateEventName(keyName);
 
-        const evt = this.eventFactory.getUserUpdateWithDate(keyName, date, this.profileManager.getNextSequenceNumber(), Date.now());
+        const evt = this.eventFactory.getUserUpdateWithDate(
+            keyName, 
+            date, 
+            this.profileManager.getNextSequenceNumber(), 
+            DateHelper.nowInUtcTime());
+
         this.queueEvent(evt);
 
         if (this.profileManager.isQAUser()) {
@@ -160,7 +185,7 @@ export class SwrveInternal {
     public sendUserUpdate(attributes: IReadonlyDictionary<string | number | boolean>): void {
         if (this.pauseSDK) return;
 
-        const evt = this.eventFactory.getUserUpdate(attributes, this.profileManager.getNextSequenceNumber(), Date.now());
+        const evt = this.eventFactory.getUserUpdate(attributes, this.profileManager.getNextSequenceNumber(), DateHelper.nowInUtcTime());
 
         this.queueEvent(evt);
 
@@ -176,7 +201,7 @@ export class SwrveInternal {
         this.validateEventName(keyName);
 
         const evt = this.eventFactory.getPurchaseEvent(keyName, currency, cost, quantity,
-            this.profileManager.getNextSequenceNumber(), Date.now());
+            this.profileManager.getNextSequenceNumber(), DateHelper.nowInUtcTime());
 
         this.queueEvent(evt);
 
@@ -192,7 +217,7 @@ export class SwrveInternal {
         if (this.pauseSDK) return;
 
         const evt = this.eventFactory.getInAppPurchaseEventWithoutReceipt(quantity, productId, productPrice,
-            currency, this.profileManager.getNextSequenceNumber(), Date.now(), rewards);
+            currency, this.profileManager.getNextSequenceNumber(), DateHelper.nowInUtcTime(), rewards);
 
         this.queueEvent(evt);
 
@@ -205,7 +230,11 @@ export class SwrveInternal {
     public sendCurrencyGiven(currencyGiven: string, amount: number): void {
         if (this.pauseSDK) return;
 
-        const evt = this.eventFactory.getCurrencyGivenEvent(currencyGiven, amount, this.profileManager.getNextSequenceNumber(), Date.now());
+        const evt = this.eventFactory.getCurrencyGivenEvent(
+            currencyGiven, 
+            amount, 
+            this.profileManager.getNextSequenceNumber(),
+            DateHelper.nowInUtcTime());
 
         this.queueEvent(evt);
 
@@ -475,9 +504,14 @@ export class SwrveInternal {
         this._shutdown = true;
         this.evtManager.saveEventsToStorage(this.profileManager.currentUser.userId);
         clearTimeout(this.eventLoopTimer);
-        this.removeLifecycleListeners();
-        document.removeEventListener("visibilitychange", this.onVisibilityChanged);
         this.profileManager.clearEtagHeader();
+
+        const qa = this.profileManager.QAUser;
+        if (qa && qa.reset_device_state === true) {
+            SwrveLogger.info("SwrveSDK: Clearing campaign state for QA user: " + this.profileManager.currentUser.userId);
+            this.campaignManager.resetCampaignState();
+            StorageManager.clearData(CAMPAIGN_STATE + this.profileManager.currentUser.userId);
+        }
     }
 
     public handleSendingQueue(): void {
@@ -672,24 +706,11 @@ export class SwrveInternal {
     }
 
     private queueStartSessionEvent(): void {
-        const event = this.eventFactory.getStartSessionEvent(this.profileManager.getNextSequenceNumber(), Date.now());
+        const event = this.eventFactory.getStartSessionEvent(this.profileManager.getNextSequenceNumber(), DateHelper.nowInUtcTime());
         this.queueEvent(event);
 
         if (this.profileManager.isQAUser()) {
             this.queueEvent(this.eventFactory.getWrappedSessionStart(event));
-        }
-    }
-
-    private onVisibilityChanged = () => {
-        if (document.hidden) {
-            this.evtManager.saveEventsToStorage(this.profileManager.currentUser.userId);
-        } else {
-            const isValid = this.profileManager.isCurrentSessionValid();
-            if (!isValid) {
-                this.autoShowEnabled = true;
-                this.initSDK();
-                this.queueDeviceProperties();
-            }
         }
     }
 
@@ -727,8 +748,16 @@ export class SwrveInternal {
     }
 
     private initSDK(): void {
-        this.queueStartSessionEvent();
-        this.checkFirstUserInitiated();
+        SwrveLogger.info("Initialising Swrve SDK");
+        this.autoShowEnabled = false;
+        const isValid = this.profileManager.hasSessionRestored();
+        if (!isValid) {
+          SwrveLogger.debug("Setting autoShowBack to true");
+          this.queueStartSessionEvent();
+          this.checkFirstUserInitiated();
+          this.autoShowEnabled = true;
+        }
+  
         this.disableAutoShowAfterDelay();
         this.sendQueuedEvents(this.profileManager.currentUser.userId, true);
         SwrveLogger.info("Swrve Config: ", this.config);
@@ -814,18 +843,24 @@ export class SwrveInternal {
 
     private checkFirstUserInitiated(): void {
         const currentUser = this.profileManager.currentUser;
-        if (currentUser.firstUse === 0 || currentUser.firstUse === undefined) {
-            this.profileManager.firstUse = getTimestampSeconds(Date.now());
-            if (this.identifiedOnAnotherDevice === false) {
-                const evt = this.eventFactory.getFirstInstallEvent(this.profileManager.firstUse, 0);
-                this.queueEvent(evt);
-    
-                if (this.profileManager.isQAUser()) {
-                    this.queueEvent(this.eventFactory.getWrappedFirstInstallEvent(evt));
-                }
-            }
+        if (
+          (currentUser && currentUser.firstUse === 0) ||
+          currentUser.firstUse === undefined
+        ) {
+          SwrveLogger.debug("First session on device detected. logging...");
+          currentUser.firstUse = DateHelper.nowInUtcTime();
+          if (this.identifiedOnAnotherDevice === false) {
+            const evt = this.eventFactory.getFirstInstallEvent(
+              currentUser.firstUse,
+              this.profileManager.getNextSequenceNumber(),
+            );
+            this.queueEvent(evt);
+            if (this.profileManager.isQAUser()) {
+                this.queueEvent(this.eventFactory.getWrappedFirstInstallEvent(evt));
+             }
+          }
         }
-    }
+      }
 
     private loadInstallDate(): void {
         const storedInstallDate = StorageManager.getData("firstInstallDate");
@@ -834,14 +869,19 @@ export class SwrveInternal {
         }
 
         if (this.installDate.length < 1) {
-            this.installDate = getInstallDateFormat(Date.now());
-            StorageManager.saveData("firstInstallDate", String(this.installDate));
+          this.installDate = getInstallDateFormat(DateHelper.nowInUtcTime());
+          StorageManager.saveData(
+            "firstInstallDate",
+            String(this.installDate),
+          );
         }
     }
 
     private queueDeviceProperties(): void {
         const deviceProperties = queryDeviceProperties(this.platform, this.profileManager, this.installDate);
-        const evt = this.eventFactory.getDeviceUpdate(deviceProperties, this.profileManager.getNextSequenceNumber(), Date.now());
+        const evt = this.eventFactory.getDeviceUpdate(deviceProperties, 
+            this.profileManager.getNextSequenceNumber(),
+            DateHelper.nowInUtcTime());
 
         this.queueEvent(evt);
 
@@ -870,16 +910,10 @@ export class SwrveInternal {
         return [mapOldResources, mapNewResources];
     }
 
-    private addLifecycleListeners(): void {
-        document.addEventListener("visibilitychange", this.onVisibilityChanged);
-        window.addEventListener("unload", this.onUnload);
-    }
-
-    private removeLifecycleListeners(): void {
-        window.removeEventListener("unload", this.onUnload);
-    }
-
-    private onUnload = () => this.shutdown();
+    private pageStateHandler(): void {
+        /** Store all user data before page close or focus out */
+        this.profileManager.saveCurrentUserBeforeSessionEnd();
+      }
 }
 
 export interface IDependencies {

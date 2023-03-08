@@ -6,6 +6,7 @@ export interface IUser {
     nextSeqNum: number;
     firstUse: number;
     sessionStart: number;
+    lastSessionEnd: number;
     isAnonymous: boolean;
     etag?: string;
     isQAUser: boolean;

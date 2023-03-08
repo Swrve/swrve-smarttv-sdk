@@ -6,6 +6,7 @@ export default interface ISwrveConfig {
     apiKey: string;
     appVersion?: string;
     stack?: SwrveStack;
+    newSessionInterval?: number;
     httpsTimeoutSeconds?: number;
     language?: string;
     contentUrl?: string;
@@ -35,6 +36,9 @@ export function configWithDefaults(config: ISwrveConfig, previousConfig: IPrevio
         autoShowMessagesMaxDelay: config.autoShowMessagesMaxDelay == null
             ? 5000
             : config.autoShowMessagesMaxDelay,
+        newSessionInterval: config.newSessionInterval == null
+            ? 1800  /** 30 minutes in seconds */
+            : config.newSessionInterval,
     });
 }
 

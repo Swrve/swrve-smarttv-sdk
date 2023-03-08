@@ -84,6 +84,7 @@ export class EventManager {
 
     public saveEventsToStorage(userId: string): void {
         if (this.queue.length > 0) {
+            SwrveLogger.info("Saving events to storage");
             const allEvents = this.getAllQueuedEvents(userId);
             this.clearQueue();
             this.storeEvents(allEvents, userId);

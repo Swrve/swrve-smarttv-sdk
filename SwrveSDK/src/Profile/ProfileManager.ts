@@ -5,29 +5,49 @@ import {StorageManager} from "../Storage/StorageManager";
 import SwrveLogger from "../utils/SwrveLogger";
 import {generateUuid} from "../utils/uuid";
 import { SWRVE_USER_ID } from "../utils/SwrveConstants";
+import DateHelper from "../utils/DateHelper";
 
 export class ProfileManager
 {
     private _currentUser: IUser;
-    private readonly sessionTimeout: number = 5 * 60 * 1000;
-
-    constructor(public userId: string, private readonly appId: number, private readonly apiKey: string) {
+    constructor(
+        public userId: string,
+        private readonly appId: number, 
+        private readonly apiKey: string, 
+        private readonly newSessionInterval: number,
+    ) {
         const session_token = getSessionToken(this.userId, this.appId, this.apiKey, new Date());
         const currentUser = StorageManager.getData(userId);
 
         if (currentUser) {
             this._currentUser = JSON.parse(currentUser);
-            this.restoreCurrentUser(session_token, userId);
+            this.resolveCurrentUser(session_token);
         } else {
-            this._currentUser = {userId, sessionToken: session_token, sessionStart: Date.now(),
-                isQAUser: false, nextSeqNum: 0, firstUse: 0, isAnonymous: true};
+            this._currentUser = {userId, sessionToken: session_token, sessionStart: DateHelper.nowInUtcTime(),
+                isQAUser: false, nextSeqNum: 0, firstUse: 0, lastSessionEnd: 0, isAnonymous: true};
         }
 
         StorageManager.saveData(userId, JSON.stringify(this._currentUser));
     }
 
-    public isCurrentSessionValid(): boolean {
-        return Date.now() <= this._currentUser.sessionStart + this.sessionTimeout;
+    public hasSessionRestored(): boolean {
+        if (this.currentUser.lastSessionEnd !== 0) {
+          const lastSession: number = this.currentUser.lastSessionEnd;
+          const now: number = Number(DateHelper.nowInUtcTime());
+          const expirationTimeout: number = this.newSessionInterval * 1000; /** convert to ms */
+          SwrveLogger.debug(`current time ${now}`);
+          SwrveLogger.debug(`lastSession: ${lastSession}`);
+          const diffTime: number = now - lastSession;
+          SwrveLogger.debug(`Diff now - lastSession: ${diffTime}`);
+          if (lastSession && diffTime > expirationTimeout) {
+            SwrveLogger.debug('session has expired.');
+            return false;
+          }
+          SwrveLogger.debug('session still active');
+          return true;
+        }
+        SwrveLogger.debug('no session. treating as expired');
+        return false;
     }
 
     public getNextSequenceNumber(): number {
@@ -83,10 +103,10 @@ export class ProfileManager
 
         if (currentUser) {
             this._currentUser = JSON.parse(currentUser);
-            this.restoreCurrentUser(session_token, newUserId);
+            this.resolveCurrentUser(session_token);
         } else {
-            this._currentUser = {userId: newUserId, sessionToken: session_token, sessionStart: Date.now(),
-                isQAUser: false, nextSeqNum: 1, firstUse: 0, isAnonymous: markAsAnonymous};
+            this._currentUser = {userId: newUserId, sessionToken: session_token, sessionStart: DateHelper.nowInUtcTime(),
+                isQAUser: false, nextSeqNum: 1, firstUse: 0, lastSessionEnd: 0, isAnonymous: markAsAnonymous};
         }
 
         StorageManager.saveData(newUserId, JSON.stringify(this._currentUser));
@@ -134,9 +154,30 @@ export class ProfileManager
         StorageManager.saveData(this._currentUser.userId, JSON.stringify(this._currentUser));
     }
 
-    private restoreCurrentUser(session_token: string, userId: string): void {
+    public saveCurrentUserBeforeSessionEnd(): void {
+        this._currentUser.lastSessionEnd = DateHelper.nowInUtcTime();
+        StorageManager.saveData(this._currentUser.userId, JSON.stringify(this._currentUser));
+        StorageManager.saveData("user_id", this.currentUser.userId);
+        SwrveLogger.debug(`Saved last session end: ${this._currentUser.lastSessionEnd}`);
+    }
+
+    private restoreCurrentUser(session_token: string, userId: string, newSessionStart: number): void {
         this._currentUser.sessionToken = session_token;
-        this._currentUser.sessionStart = Date.now();
+        this._currentUser.sessionStart = newSessionStart;
         this._currentUser.userId = userId;
+        SwrveLogger.debug(`Setup current user: ${this._currentUser.userId}`);
+    }
+
+    private resolveCurrentUser(session_token: string): void {
+        const userId = this._currentUser.userId;
+        if (this.hasSessionRestored()) {
+          if (!this._currentUser.sessionStart) {
+            const previousSessionStart = new Date(this._currentUser.sessionStart);
+            session_token = getSessionToken(userId, this.appId, this.apiKey, previousSessionStart);
+          }
+          this.restoreCurrentUser(session_token, userId, this._currentUser.sessionStart);
+        } else {
+          this.restoreCurrentUser(session_token, userId, DateHelper.nowInUtcTime());
+        }  
     }
 }

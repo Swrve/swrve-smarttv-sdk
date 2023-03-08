@@ -26,6 +26,7 @@ import {
     CAMPAIGN_ELIGIBLE_BUT_OTHER_CHOSEN,
     CAMPAIGN_STATE,
     CAMPAIGNS,
+    SWRVE_AUTOSHOW_AT_SESSION_START_TRIGGER,
 } from "../utils/SwrveConstants";
 import {SwrveMessageDisplayManager} from "./Messages/SwrveMessageDisplayManager";
 import {AssetManager} from "./AssetManager";
@@ -38,6 +39,7 @@ import { ISwrveInternalConfig } from "../Config/ISwrveInternalConfig";
 import { ResourceManager } from "../Resources/ResourceManager";
 import { SwrveButton } from "../UIElements/SwrveButton";
 import { SwrveImage } from "../UIElements/SwrveImage";
+import DateHelper from "../utils/DateHelper";
 
 export type OnAssetsLoaded = () => void;
 
@@ -199,7 +201,7 @@ export class CampaignManager
     public checkTriggers(triggerName: string, payload: object, impressionCallback: OnMessageListener, qa: boolean = false):
         ICampaignTriggerStatus {
         const matchingMessages: ISwrveMessage[] = [];
-        let globalStatus = this.applyGlobalRules();
+        let globalStatus = this.applyGlobalRules(triggerName);
         let campaignStatus: ICampaignRuleStatus | undefined;
         const campaignStatuses: IQACampaignTriggerEvent[] = [];
 
@@ -243,7 +245,7 @@ export class CampaignManager
                 let passedAllRules = matchingMessages.filter(message => {
                     for (const campaign of this.campaigns) {
                         if (campaign.id === message.parentCampaign!) {
-                            const { status, message: reason } = this.applyCampaignRules(campaign);
+                            const { status, message: reason } = this.applyCampaignRules(triggerName, campaign);
                             const ok = status === CAMPAIGN_MATCH;
                             SwrveLogger.debug(reason);
                             if (qa && !ok) {
@@ -281,7 +283,7 @@ export class CampaignManager
                         logCampaignTriggerStatus(pickedCampaign.parentCampaign!, "true", reason, CAMPAIGN_MATCH);
                     }
 
-                    this.lastShownMessageTime = Date.now();
+                    this.lastShownMessageTime = this.getNow();
 
                     if (!this.messageDisplayManager.isIAMShowing()) {
                         if (this.onMessageListener) {
@@ -368,7 +370,7 @@ export class CampaignManager
                 const campaignState = this.campaignState[parentCampaign.id];
                 campaignState.impressions++;
                 campaignState.status = "seen";
-                campaignState.lastShownTime = Date.now();
+                campaignState.lastShownTime = this.getNow();
                 this.campaignState[parentCampaign.id] = campaignState;
                 
                 StorageManager.saveData(
@@ -382,7 +384,7 @@ export class CampaignManager
         }
     }
 
-    private applyGlobalRules(): ICampaignRuleStatus {
+    private applyGlobalRules(triggerName: string): ICampaignRuleStatus {
         if (this.messagesShownCount >= this._maxMessagesPerSession) {
             return {
                 status: GLOBAL_CAMPAIGN_THROTTLE_MAX_IMPRESSIONS,
@@ -392,7 +394,7 @@ export class CampaignManager
 
         const timeSinceStartup = this.profileManager.currentUser.sessionStart + (this._delayFirstMessage * 1000);
         SwrveLogger.info("delay first message " + this._delayFirstMessage);
-        if (timeSinceStartup > Date.now()) {
+        if (triggerName !== SWRVE_AUTOSHOW_AT_SESSION_START_TRIGGER && timeSinceStartup > this.getNow()) {
             return {
                 status: GLOBAL_CAMPAIGN_THROTTLE_LAUNCH_TIME,
                 message: "{App Throttle limit} Too soon after launch.  Wait until " + timeSinceStartup,
@@ -400,7 +402,7 @@ export class CampaignManager
         }
 
         const lastDisplay = this.lastShownMessageTime + (this._minDelay * 1000);
-        if (this.lastShownMessageTime !== 0 && lastDisplay > Date.now()) {
+        if (this.lastShownMessageTime !== 0 && lastDisplay > this.getNow()) {
             return {
                 status: GLOBAL_CAMPAIGN_THROTTLE_RECENT,
                 message: "{App Throttle limit} Too soon after last message.  Wait until " + lastDisplay,
@@ -413,11 +415,11 @@ export class CampaignManager
         };
     }
 
-    private applyCampaignRules(parentCampaign: ISwrveCampaign): ICampaignRuleStatus {
+    private applyCampaignRules(triggerName: string, parentCampaign: ISwrveCampaign): ICampaignRuleStatus {
         const rules = parentCampaign.rules;
         const campaignState = this.campaignState[parentCampaign.id];
 
-        if (parentCampaign.start_date > Date.now() || parentCampaign.end_date < Date.now()) {
+        if (parentCampaign.start_date > this.getNow() || parentCampaign.end_date < this.getNow()) {
             return {
                 status: CAMPAIGN_NOT_ACTIVE,
                 message: "Campaign " + parentCampaign.id + "not active.",
@@ -425,7 +427,7 @@ export class CampaignManager
         }
 
         const timeSinceStart = this.profileManager.currentUser.sessionStart + (rules.delay_first_message * 1000);
-        if (timeSinceStart > Date.now()) {
+        if (triggerName !== SWRVE_AUTOSHOW_AT_SESSION_START_TRIGGER && timeSinceStart > this.getNow()) {
             return {
                 status: CAMPAIGN_THROTTLE_LAUNCH_TIME,
                 message: "{Campaign throttle limit} Too soon after launch. Wait until " + timeSinceStart,
@@ -442,7 +444,7 @@ export class CampaignManager
         }
 
         const lastShown = campaignState.lastShownTime + (rules.min_delay_between_messages * 1000);
-        if (campaignState.lastShownTime !== 0 && lastShown > Date.now()) {
+        if (campaignState.lastShownTime !== 0 && lastShown > this.getNow()) {
             const message = "{Campaign throttle limit} Too soon after last campaign. Wait until "
                           + (lastShown + rules.min_delay_between_messages);
             return {
@@ -525,4 +527,8 @@ export class CampaignManager
 
         return assets;
     }
+
+    private getNow(): number {
+        return DateHelper.nowInUtcTime();
+      }
 }

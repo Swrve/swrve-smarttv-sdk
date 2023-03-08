@@ -10,6 +10,7 @@ export interface ISwrveInternalConfig
     readonly appVersion?: string;
     readonly stack: SwrveStack;
     readonly httpsTimeoutSeconds: number;
+    readonly newSessionInterval: number;
     readonly userId: string;
     readonly language: string;
     readonly contentUrl?: string;

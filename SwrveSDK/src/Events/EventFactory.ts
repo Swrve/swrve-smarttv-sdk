@@ -22,7 +22,7 @@ import IQAIAPEvent from "../WebApi/Events/QA/IQAIAPEvent";
 import IQACurrencyGivenEvent from "../WebApi/Events/QA/IQACurrencyGivenEvent";
 import IButtonClickedEvent from "../WebApi/Events/IButtonClickedEvent";
 import IQAButtonClickedEvent from "../WebApi/Events/QA/IQAButtonClickedEvent";
-import { getISOString } from "../utils/TimeHelper";
+import DateHelper from "../utils/DateHelper";
 
 export class EventFactory {
     /************************ Named Event ***********************************************************/
@@ -59,7 +59,7 @@ export class EventFactory {
             time,
             seqnum,
             attributes: {
-                [keyName]: getISOString(date),
+                [keyName]: DateHelper.dateToSwrveISOString(date),
             },
         };
     }
@@ -300,7 +300,7 @@ export class EventFactory {
     public getButtonClickEvent(seqnum: number, campaignId: number, name: string): IButtonClickedEvent {
         return {
             type: "event",
-            time: Date.now(),
+            time: DateHelper.nowInUtcTime(),
             seqnum,
             name: `Swrve.Messages.Message-${campaignId}.click`,
             payload: {
@@ -315,7 +315,7 @@ export class EventFactory {
             type: "qa_log_event",
             log_type: "campaign-button-clicked",
             seqnum,
-            time: Date.now(),
+            time: DateHelper.nowInUtcTime(),
             log_source: "sdk",
             log_details: {
                 campaign_id,
@@ -335,7 +335,7 @@ export class EventFactory {
 
         return {
             type: "event",
-            time: Date.now(),
+            time: DateHelper.nowInUtcTime(),
             seqnum,
             name: "Swrve.Messages.Message-" + message.id + ".impression",
             payload: {
@@ -355,7 +355,7 @@ export class EventFactory {
             },
             seqnum,
             type: "qa_log_event",
-            time: Date.now(),
+            time: DateHelper.nowInUtcTime(),
             log_type: "campaigns-downloaded",
         };
     }
@@ -377,7 +377,7 @@ export class EventFactory {
             type: "qa_log_event",
             log_type: "campaign-triggered",
             seqnum,
-            time: Date.now(),
+            time: DateHelper.nowInUtcTime(),
             log_source: "sdk",
             log_details: event,
         };
