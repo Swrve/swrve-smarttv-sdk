@@ -685,12 +685,10 @@ export class SwrveInternal {
         if (type === SwrveConstants.DISMISS && this.onIAMDismissedCallback) {
             this.onIAMDismissedCallback();
         } else if (type === SwrveConstants.CUSTOM) {
-            if (action.match(/^https?:\/\//)) {
-                this.platform.openLink(action);
-            }
-
             if (this.onCustomButtonClickedCallback) {
                 this.onCustomButtonClickedCallback(action);
+            } else if (action.match(/^https?:\/\//)) {
+                this.platform.openLink(action);
             }
         }
     }
