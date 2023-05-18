@@ -297,12 +297,12 @@ export class EventFactory {
 
     /************************ Button Click Event ***********************************************************/
 
-    public getButtonClickEvent(seqnum: number, campaignId: number, name: string): IButtonClickedEvent {
+    public getButtonClickEvent(seqnum: number, messageId: number, name: string): IButtonClickedEvent {
         return {
             type: "event",
             time: DateHelper.nowInUtcTime(),
             seqnum,
-            name: `Swrve.Messages.Message-${campaignId}.click`,
+            name: `Swrve.Messages.Message-${messageId}.click`,
             payload: {
                 name,
             },

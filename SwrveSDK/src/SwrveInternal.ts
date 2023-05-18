@@ -659,8 +659,8 @@ export class SwrveInternal {
     private handleButtonClicked(button: ISwrveButton, parentCampaign: ISwrveCampaign): void {
         const type = String(button.type.value);
         const action = String(button.action.value);
-
-        this.queueEvent(this.eventFactory.getButtonClickEvent(this.profileManager.getNextSequenceNumber(), parentCampaign.id, button.name));
+        const messageId = this.campaignManager.getCampaignVariantID(parentCampaign);
+        this.queueEvent(this.eventFactory.getButtonClickEvent(this.profileManager.getNextSequenceNumber(), messageId, button.name));
 
         if (this.profileManager.isQAUser()) {
             let logType;
@@ -672,7 +672,7 @@ export class SwrveInternal {
                 this.queueEvent(
                     this.eventFactory.getQAButtonClickEvent(
                         parentCampaign.id,
-                        this.campaignManager.getCampaignVariantID(parentCampaign),
+                        messageId,
                         button.name,
                         logType,
                         action || "No action",
