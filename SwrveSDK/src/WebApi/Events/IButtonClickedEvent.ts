@@ -6,5 +6,6 @@ export default interface IButtonClickedEvent{
     payload:
     {
         name: string,
+        embedded: string,
     };
 }

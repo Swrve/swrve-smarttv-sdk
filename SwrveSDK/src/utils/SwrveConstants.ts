@@ -47,6 +47,7 @@ export const CAMPAIGN_ELIGIBLE_BUT_OTHER_CHOSEN = 10;
 
 export const CAMPAIGN_STATE = "campaignState.";
 export const CAMPAIGNS = "campaigns.";
+export const REAL_TIME_USER_PROPERTIES = "real_time_user_properties.";
 
 //Identity
 export const EXISTING_EXTERNAL_ID_MATCHES_SWRVE_ID = "existing_external_id_with_matching_swrve_id";

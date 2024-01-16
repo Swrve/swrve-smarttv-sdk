@@ -14,7 +14,7 @@ export class AssetManager
             const key = asset.getAssetID();
             if (this.assets[key] === undefined) {
                 SwrveLogger.info("ASSET MANAGER: add new asset " + key);
-                this.assets[key] = {id: key, path: this._imagesCDN + asset.getAssetPath().toString()};
+                this.assets[key] = {id: key, path: asset.getAssetPath().toString()};
             }
         }
 
@@ -58,7 +58,7 @@ export class AssetManager
 
     private checkCache( asset: ISwrveAsset): boolean {
         const loadedImage = document.createElement("img");
-        loadedImage.src = this._imagesCDN + asset.getAssetPath();
+        loadedImage.src = asset.getAssetPath().toString();
 
         const element = document.getElementById("PALImageCache");
         if (element) {

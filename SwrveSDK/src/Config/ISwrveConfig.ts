@@ -1,5 +1,9 @@
 import {ISwrveInternalConfig, SwrveStack} from "./ISwrveInternalConfig";
-import {generateUuid} from "../utils/uuid";
+import { ISwrveEmbeddedMessage } from "../Campaigns/ISwrveCampaign";
+import IDictionary from "../utils/IDictionary";
+
+export declare type OnEmbeddedMessageListener = (msg: ISwrveEmbeddedMessage, personalizationProperties?: IDictionary<string>) => void;
+export declare type OnPersonalizationProvider = (eventPayload: IDictionary<string>) => IDictionary<string>;
 
 export default interface ISwrveConfig {
     appId: number;
@@ -18,20 +22,23 @@ export default interface ISwrveConfig {
     inAppMessageButtonFocusStyle?: ICSSStyle | string;
     inAppMessageStyleOverride?: string;
     managedMode?: boolean;
+    embeddedMessageConfig?: ISwrveEmbeddedMessageConfig;
+    personalizationProvider?: OnPersonalizationProvider;
+
 }
 
 export interface ICSSStyle {
     [key: string]: string;
 }
 
-export function configWithDefaults(config: ISwrveConfig, previousConfig: IPreviousConfig = {}): ISwrveInternalConfig {
+export function configWithDefaults(config: ISwrveConfig, lastUserId: string): ISwrveInternalConfig {
     return Object.freeze<ISwrveInternalConfig>({
         ...config,
         stack: config.stack || "us",
         httpsTimeoutSeconds: config.httpsTimeoutSeconds == null
             ? 60
             : config.httpsTimeoutSeconds,
-        userId: previousConfig.userId || generateUuid().toString(),
+        userId: lastUserId,
         language: config.language || "English",
         autoShowMessagesMaxDelay: config.autoShowMessagesMaxDelay == null
             ? 5000
@@ -45,3 +52,7 @@ export function configWithDefaults(config: ISwrveConfig, previousConfig: IPrevio
 export interface IPreviousConfig {
     userId?: string;
 }
+
+export interface ISwrveEmbeddedMessageConfig {
+    embeddedCallback?: OnEmbeddedMessageListener;
+  }

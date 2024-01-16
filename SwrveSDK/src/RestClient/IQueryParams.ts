@@ -4,6 +4,8 @@ export interface IQueryParams {
     app_version?: string;
     joined: string;
     version: string;
+    in_app_version: string;
+    embedded_campaign_version: string;
     language: string;
     app_store: string;
     device_width: string;

@@ -1,5 +1,4 @@
 import {ICampaignDownloadData, IQATriggerReport, IQACampaignTriggerEvent} from "./EventTypeInterfaces";
-import {ISwrveMessage} from "../Campaigns/ISwrveCampaign";
 import ICampaignsDownloadedEvent from "../WebApi/Events/QA/ICampaignsDownloadedEvent";
 import ICampaignTriggeredEvent from "../WebApi/Events/QA/ICampaignTriggeredEvent";
 import IQAPurchaseEvent from "../WebApi/Events/QA/IQAPurchaseEvent";
@@ -297,7 +296,7 @@ export class EventFactory {
 
     /************************ Button Click Event ***********************************************************/
 
-    public getButtonClickEvent(seqnum: number, messageId: number, name: string): IButtonClickedEvent {
+    public getButtonClickEvent(seqnum: number, messageId: number, name: string, embedded: string): IButtonClickedEvent {
         return {
             type: "event",
             time: DateHelper.nowInUtcTime(),
@@ -305,6 +304,7 @@ export class EventFactory {
             name: `Swrve.Messages.Message-${messageId}.click`,
             payload: {
                 name,
+                embedded,
             },
         };
     }
@@ -329,20 +329,13 @@ export class EventFactory {
 
     /************************ QA Only Events ***********************************************************/
 
-    public getImpressionEvent(message: ISwrveMessage, seqnum: number): INamedEvent {
-        const format = message.template.formats[0];
-        const size = format.size.w + "x" + format.size.h;
-
+    public getImpressionEvent(messageId: number, seqnum: number, payload?: IDictionary<string | number>): INamedEvent {
         return {
             type: "event",
             time: DateHelper.nowInUtcTime(),
             seqnum,
-            name: "Swrve.Messages.Message-" + message.id + ".impression",
-            payload: {
-                orientation: format.orientation,
-                size,
-                format: format.name,
-            },
+            name: "Swrve.Messages.Message-" + messageId + ".impression",
+            payload,
         };
     }
 

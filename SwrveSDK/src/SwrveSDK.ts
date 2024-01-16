@@ -1,12 +1,13 @@
 import {SwrveInternal} from './SwrveInternal';
 import {ResourceManager} from './Resources/ResourceManager';
-import {ISwrveCampaign, ISwrveMessage, IUserResource} from './Campaigns/ISwrveCampaign';
+import {ISwrveCampaign, ISwrveBaseMessage, IUserResource} from './Campaigns/ISwrveCampaign';
 import {IUserInfo} from './Profile/IUser';
 import ISwrveConfig from "./Config/ISwrveConfig";
 import IDictionary from "./utils/IDictionary";
 import IReadonlyDictionary from "./utils/IReadonlyDictionary";
 import { sdkVersion, GET_INSTANCE_ERROR } from './utils/SwrveConstants';
 import IReward from "./WebApi/Events/IReward";
+import { ISwrveEmbeddedMessage } from "./Campaigns/ISwrveCampaign";
 
 let swrveInternal: SwrveInternal | null = null;
 
@@ -17,7 +18,7 @@ export type GetUserResourcesDiffCallback = (oldDictionary: IDictionary<IUserReso
                                             newDictionary: IDictionary<IUserResource>,
                                             json: any) => any;
 export type OnIdentifyErrorCallback = (error: string) => void;
-export type OnMessageListener = (msg: ISwrveMessage) => void;
+export type OnMessageListener = (msg: ISwrveBaseMessage) => void;
 export type OnIAMDismissed = () => void;
 export type OnCustomButtonClicked = (customString: string) => void;
 
@@ -109,6 +110,33 @@ export class SwrveSDK {
 
     public static getSDKVersion(): string {
         return sdkVersion;
+    }
+
+    //******************************** Embedded Campaigns *********************************************//
+
+    public static embeddedMessageWasShownToUser(message: ISwrveEmbeddedMessage): void {
+        return SwrveSDK.checkInstance().embeddedMessageWasShownToUser(message);
+    }
+
+    public static embeddedMessageButtonWasPressed(
+        message: ISwrveEmbeddedMessage,
+        buttonName: string,
+    ): void {
+        return SwrveSDK.checkInstance().embeddedMessageButtonWasPressed(message, buttonName);
+    }
+
+    public static getPersonalizedEmbeddedMessageData(
+        message: ISwrveEmbeddedMessage,
+        personalizationProperties: IDictionary<string>,
+    ): string | null {
+        return SwrveSDK.checkInstance().getPersonalizedEmbeddedMessageData(message, personalizationProperties);
+    }
+
+    public static getPersonalizedText(
+        text: string,
+        personalizationProperties: IDictionary<string>,
+    ): string | null {
+        return SwrveSDK.checkInstance().getPersonalizedText(text, personalizationProperties);
     }
 
     //*************************************** Event Management ************************************//

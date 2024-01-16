@@ -6,6 +6,8 @@ import {
     ISwrveMessage,
     ISwrveTrigger,
     ISwrveAsset,
+    ISwrveBaseMessage,
+    ISwrveEmbeddedMessage,
 } from "./ISwrveCampaign";
 import {StorageManager} from "../Storage/StorageManager";
 import {ICampaignDownloadData, IQACampaignTriggerEvent} from "../Events/EventTypeInterfaces";
@@ -40,6 +42,8 @@ import { ResourceManager } from "../Resources/ResourceManager";
 import { SwrveButton } from "../UIElements/SwrveButton";
 import { SwrveImage } from "../UIElements/SwrveImage";
 import DateHelper from "../utils/DateHelper";
+import { OnEmbeddedMessageListener } from "../Config/ISwrveConfig";
+import IDictionary from "../utils/IDictionary";
 
 export type OnAssetsLoaded = () => void;
 
@@ -66,6 +70,7 @@ export class CampaignManager
     private readonly messageDisplayManager: SwrveMessageDisplayManager;
     private readonly assetManager: AssetManager;
     private onMessageListener: OnMessageListener | null = null;
+    private onEmbeddedListener: OnEmbeddedMessageListener | null = null;
 
     //global rules
     private _maxMessagesPerSession: number = 99999;
@@ -167,6 +172,10 @@ export class CampaignManager
         return this.campaignState[campaignId];
     }
 
+    public onEmbeddedMessage(onEmbeddedMessageListener: OnEmbeddedMessageListener): void {
+        this.onEmbeddedListener = onEmbeddedMessageListener;
+    }
+
     public onMessage(onMessageListener: OnMessageListener): void {
         this.onMessageListener = onMessageListener;
     }
@@ -175,7 +184,11 @@ export class CampaignManager
         this.messageDisplayManager.onButtonClicked(callback);
     }
 
-    public showCampaign(campaign: ISwrveCampaign, impressionCallback?: OnMessageListener): boolean {
+    public showCampaign(
+        campaign: ISwrveCampaign, 
+        personalizationProperties?: IDictionary<string>,
+        impressionCallback?: OnMessageListener,
+    ): boolean {
         if (campaign.messages && campaign.messages.length > 0) {
             const message = campaign.messages[0];
             message.parentCampaign = campaign.id;
@@ -185,22 +198,39 @@ export class CampaignManager
               campaign,
               this.assetManager.ImagesCDN,
               this.platform,
+              personalizationProperties,
             );
 
             if (impressionCallback) {
                 impressionCallback(message);
             }
       
-            this.handleImpression(message, () => {} );
+            this.updateCampaignState(message);
+            return true;
+        } else if (campaign.embedded_message && campaign.embedded_message.data) {
+            const embeddedMessage = campaign.embedded_message;
+            embeddedMessage.parentCampaign = campaign.id;
+      
+            if (this.onEmbeddedListener) {
+              this.onEmbeddedListener(
+                campaign.embedded_message,
+                personalizationProperties,
+              );
+            }
             return true;
         } else {
             return false;
         }
     }
 
-    public checkTriggers(triggerName: string, payload: object, impressionCallback: OnMessageListener, qa: boolean = false):
-        ICampaignTriggerStatus {
-        const matchingMessages: ISwrveMessage[] = [];
+    public checkTriggers(
+        triggerName: string, 
+        payload: object, 
+        impressionCallback: OnMessageListener, 
+        qa: boolean = false, 
+        personalizationProperties?: IDictionary<string>,
+    ):  ICampaignTriggerStatus {
+        const matchingMessages: ISwrveBaseMessage[] = [];
         let globalStatus = this.applyGlobalRules(triggerName);
         let campaignStatus: ICampaignRuleStatus | undefined;
         const campaignStatuses: IQACampaignTriggerEvent[] = [];
@@ -226,7 +256,15 @@ export class CampaignManager
                         }
                         if (canTrigger) {
                             if (campaign.messages) {
-                                campaign.messages.forEach(message => (matchingMessages.push({parentCampaign: campaign.id, ...message})));
+                                campaign.messages.forEach(
+                                    message => (matchingMessages.push(
+                                        {parentCampaign: campaign.id, ...message as ISwrveBaseMessage},
+                                    )));
+                            } else if (campaign.embedded_message) {
+                                matchingMessages.push({
+                                    parentCampaign: campaign.id,
+                                    ...campaign.embedded_message as ISwrveBaseMessage,
+                                });
                             }
                             break;
                         }
@@ -245,7 +283,7 @@ export class CampaignManager
                 let passedAllRules = matchingMessages.filter(message => {
                     for (const campaign of this.campaigns) {
                         if (campaign.id === message.parentCampaign!) {
-                            const { status, message: reason } = this.applyCampaignRules(triggerName, campaign);
+                            const { status, message: reason } = this.applyCampaignRules(triggerName, campaign, personalizationProperties);
                             const ok = status === CAMPAIGN_MATCH;
                             SwrveLogger.debug(reason);
                             if (qa && !ok) {
@@ -291,13 +329,34 @@ export class CampaignManager
                         } else {
                             for (const campaign of this.campaigns) {
                                 if (campaign.id === selectedMessage.parentCampaign!) {
-                                    this.showMessage(selectedMessage, campaign);
-                                    break;
-                                }
+                                    if (campaign.messages && campaign.messages.length > 0) {
+                                      this.showMessage(selectedMessage as ISwrveMessage, campaign, personalizationProperties);
+                                      this.updateCampaignState(selectedMessage);
+                                      impressionCallback(selectedMessage);
+                                      break;
+                                    }
+                    
+                                    if (
+                                      campaign.embedded_message &&
+                                      campaign.embedded_message.data
+                                    ) {
+                                      if (this.onEmbeddedListener) {
+                                        this.onEmbeddedListener(
+                                          selectedMessage as ISwrveEmbeddedMessage,
+                                          personalizationProperties,
+                                        );
+                                      }
+                    
+                                      break;
+                                    }
+                                  }
                             }
                         }
 
-                        this.handleImpression(selectedMessage, impressionCallback);
+                        this.updateCampaignState(selectedMessage);
+                        if (impressionCallback) {
+                            impressionCallback(selectedMessage as ISwrveMessage);
+                        }
                     }
                 }
             } else  if (qa) {
@@ -309,8 +368,8 @@ export class CampaignManager
         return { globalStatus, campaignStatus, campaignFailCode, campaigns: campaignStatuses };
     }
 
-    public showMessage(message: ISwrveMessage, campaign: ISwrveCampaign): void {
-        this.messageDisplayManager.showMessage(message, campaign, this.assetManager.ImagesCDN, this.platform);
+    public showMessage(message: ISwrveMessage, campaign: ISwrveCampaign, personalizationProperties?: IDictionary<string>): void {
+        this.messageDisplayManager.showMessage(message, campaign, this.assetManager.ImagesCDN, this.platform, personalizationProperties);
     }
 
     public closeMessage(): void {
@@ -360,11 +419,12 @@ export class CampaignManager
     }
 
     public getMessageCenterCampaigns(): ISwrveCampaign[] {
-        return this.campaigns.filter(campaign => campaign.message_center && campaign.messages && campaign.messages.length > 0)
+        return this.campaigns.filter(campaign => (campaign.message_center && campaign.messages && campaign.messages.length > 0) 
+        || (campaign.message_center && campaign.embedded_message && campaign.embedded_message.data.length > 0))
                              .map(campaign => ({ ...campaign }));
     }
 
-    private handleImpression(message: ISwrveMessage, impressionCallback: OnMessageListener): void {
+    public updateCampaignState(message: ISwrveBaseMessage): void {
         for (const parentCampaign of this.campaigns) {
             if (parentCampaign.id === message.parentCampaign!) {
                 const campaignState = this.campaignState[parentCampaign.id];
@@ -377,8 +437,7 @@ export class CampaignManager
                   CAMPAIGN_STATE + this.profileManager.currentUser.userId,
                   JSON.stringify(this.campaignState),
                 );
-        
-                impressionCallback(message);
+
                 this.messagesShownCount++;
             }
         }
@@ -415,7 +474,11 @@ export class CampaignManager
         };
     }
 
-    private applyCampaignRules(triggerName: string, parentCampaign: ISwrveCampaign): ICampaignRuleStatus {
+    private applyCampaignRules(
+        triggerName: string, 
+        parentCampaign: ISwrveCampaign, 
+        personalizationProperties?: IDictionary<string>,
+    ): ICampaignRuleStatus {
         const rules = parentCampaign.rules;
         const campaignState = this.campaignState[parentCampaign.id];
 
@@ -453,7 +516,12 @@ export class CampaignManager
             };
         }
 
-        const assetsForTrigger = CampaignManager.getAllAssets([parentCampaign]);
+        const assetsForTrigger = CampaignManager.getAllAssets(
+            [parentCampaign], 
+            this.assetManager.ImagesCDN, 
+            personalizationProperties,
+        );
+
         if (!this.assetManager.checkAssetsForCampaign(assetsForTrigger)) {
             return {
                 status: CAMPAIGN_NOT_DOWNLOADED,
@@ -496,8 +564,15 @@ export class CampaignManager
         });
     }
 
-    private handleAssets(onAssetsLoaded: OnAssetsLoaded): void {
-        const assets = CampaignManager.getAllAssets(this.campaigns);
+    private handleAssets(
+        onAssetsLoaded: OnAssetsLoaded, 
+        personalizationProperties?: IDictionary<string>,
+    ): void {
+        const assets = CampaignManager.getAllAssets(
+            this.campaigns, 
+            this.assetManager.ImagesCDN,
+            personalizationProperties,
+        );
         this.assetManager.manageAssets(assets)
             .then(() => {
                 SwrveLogger.info("CampaignManager: asset download complete");
@@ -508,18 +583,26 @@ export class CampaignManager
             });
     }
 
-    public static getAllAssets(campaigns: ReadonlyArray<ISwrveCampaign>): ISwrveAsset[] {
+    public static getAllAssets(
+        campaigns: ReadonlyArray<ISwrveCampaign>, 
+        cdn: string,
+        personalizationProperties?: IDictionary<string>,
+    ): ISwrveAsset[] {
         const assets: ISwrveAsset[] = [];
         for (const campaign of campaigns) {
             for (const message of campaign.messages || []) {
                 const formats = (message.template && message.template.formats) || [];
                 for (const format of formats) {
                     for (const button of format.buttons || []) {
-                        assets.push(new SwrveButton(button));
+                        assets.push(
+                            new SwrveButton(button, cdn, personalizationProperties),
+                        );
                     }
 
                     for (const image of format.images || []) {
-                        assets.push(new SwrveImage(image));
+                        assets.push(
+                            new SwrveImage(image, cdn, personalizationProperties),
+                        );
                     }
                 }
             }
@@ -528,7 +611,20 @@ export class CampaignManager
         return assets;
     }
 
+    // private canCampaignRender(
+    //     campaign: ISwrveCampaign,
+    //     personalizationProperties?: IDictionary<string>,
+    //   ): boolean {
+    //     const assets = CampaignManager.getAllAssets(
+    //       [campaign],
+    //       this.assetManager.ImagesCDN,
+    //       personalizationProperties,
+    //     );
+    
+    //     return assets.every((asset) => asset.canRender());
+    // }
+
     private getNow(): number {
         return DateHelper.nowInUtcTime();
-      }
+    }
 }

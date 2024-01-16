@@ -1,5 +1,5 @@
 import { APP_ID_ERROR } from "../utils/SwrveConstants";
-import {ICSSStyle} from "./ISwrveConfig";
+import {ICSSStyle, ISwrveEmbeddedMessageConfig, OnPersonalizationProvider} from "./ISwrveConfig";
 
 export type SwrveStack = "us" | "eu";
 
@@ -22,6 +22,9 @@ export interface ISwrveInternalConfig
     readonly inAppMessageButtonFocusStyle?: Readonly<ICSSStyle> | string;
     readonly inAppMessageStyleOverride?: string;
     readonly managedMode?: boolean;
+    readonly embeddedMessageConfig?: ISwrveEmbeddedMessageConfig;
+    readonly personalizationProvider?: OnPersonalizationProvider;
+
 }
 
 export function validateConfig(config: ISwrveInternalConfig): void {

@@ -12,7 +12,9 @@ import IdentityResponse from "../WebApi/Identity/IIdentityResponse";
 
 export class SwrveRestClient {
     public readonly version: number = 3;
-    public readonly apiVersion: string = "7";
+    public readonly apiVersion: string = "8";
+    public readonly inAppVersion: string = "1";
+    public readonly embeddedVersion: string = "1";
 
     public constructor(
         private readonly config: ISwrveInternalConfig,
@@ -126,7 +128,9 @@ export class SwrveRestClient {
             .join("&");
 
         const etagParam = etag ? "&etag=" + etag : "";
-        return query + etagParam + "&session_token=" + this.profileManager!.getSessionToken();
+        const sessionToken = this.profileManager!.getSessionToken();
+        const sessionTokenParam =  sessionToken ? "&session_token=" + sessionToken : "";
+        return query + etagParam + sessionTokenParam;
     }
 
     public getContentRequestParams(): IQueryParams {
@@ -136,6 +140,8 @@ export class SwrveRestClient {
             app_version: this.config.appVersion,
             joined: this.profileManager.currentUser.firstUse.toString(),
             version: this.apiVersion,
+            in_app_version: this.inAppVersion,
+            embedded_campaign_version: this.embeddedVersion,
             language: this.platform.language,
             app_store: this.platform.appStore,
             device_width: this.platform.screenWidth.toString(),

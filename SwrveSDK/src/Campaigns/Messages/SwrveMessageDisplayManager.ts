@@ -61,7 +61,13 @@ export class SwrveMessageDisplayManager {
         this.initListener();
     }
 
-    public showMessage(message: ISwrveMessage, parentCampaign: ISwrveCampaign, imagesCDN: string, platform: IPlatform): void {
+    public showMessage(
+        message: ISwrveMessage, 
+        parentCampaign: ISwrveCampaign, 
+        imagesCDN: string, 
+        platform: IPlatform,
+        personalizationProperties?: IDictionary<string>,
+    ): void {
           this.screenCenterWidth = platform.screenWidth / 2;
           this.screenCenterHeight = platform.screenHeight / 2;
 

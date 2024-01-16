@@ -1,5 +1,7 @@
+import IDictionary from "../utils/IDictionary";
 export interface ISwrveCampaignResourceResponse
 {
+    real_time_user_properties?: IDictionary<string>;
     user_resources?: ReadonlyArray<IUserResource>;
     location_campaigns?: object;
     campaigns: ISwrveCampaigns;
@@ -38,6 +40,7 @@ export interface ISwrveCampaign
     rules: ISwrveCampaignRule;
     triggers?: ReadonlyArray<ISwrveTrigger>;
     message_center: boolean;
+    embedded_message?: ISwrveEmbeddedMessage;
     messages?: ReadonlyArray<ISwrveMessage>;
     subject: string | null;
 }
@@ -80,14 +83,22 @@ export interface ISwrveGlobalRule
     max_messages_per_session?: number;
 }
 
-export interface ISwrveMessage
-{
+export interface ISwrveBaseMessage {
     id: number;
-    template: {formats: ReadonlyArray<ISwrveFormat>};
     name: string;
-    rules: {orientations: string};
     priority: number;
+    rules: { orientations: string };
     parentCampaign?: number;
+}
+
+export interface ISwrveEmbeddedMessage extends ISwrveBaseMessage {
+    data: string;
+    buttons: ReadonlyArray<string>;
+    type: "other" | "json";
+}
+
+export interface ISwrveMessage extends ISwrveBaseMessage {
+    template: { formats: ReadonlyArray<ISwrveFormat> };
 }
 
 export interface ISwrveFormat
@@ -119,6 +130,7 @@ export interface ISwrveValue
 export interface ISwrveAsset {
     getAssetID(): string|number;
     getAssetPath(): string | number;
+    canRender(): boolean;
 }
 
 export interface ISwrveButton
@@ -135,6 +147,8 @@ export interface ISwrveButton
     action: ISwrveValue;
     game_id: ISwrveValue;
     image_up: ISwrveValue;
+    dynamic_image_url?: string;
+    text?: ISwrveValue;
 }
 
 export interface ISwrveImage
@@ -149,4 +163,6 @@ export interface ISwrveImage
     x: ISwrveValue;
     y: ISwrveValue;
     h: ISwrveValue;
+    dynamic_image_url?: string;
+    text?: ISwrveValue;
 }

@@ -157,7 +157,7 @@ export class ProfileManager
     public saveCurrentUserBeforeSessionEnd(): void {
         this._currentUser.lastSessionEnd = DateHelper.nowInUtcTime();
         StorageManager.saveData(this._currentUser.userId, JSON.stringify(this._currentUser));
-        StorageManager.saveData("user_id", this.currentUser.userId);
+        StorageManager.saveData(SWRVE_USER_ID, this.currentUser.userId);
         SwrveLogger.debug(`Saved last session end: ${this._currentUser.lastSessionEnd}`);
     }
 
