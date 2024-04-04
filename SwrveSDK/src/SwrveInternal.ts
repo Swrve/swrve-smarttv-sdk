@@ -42,6 +42,7 @@ import { TextTemplating } from "./utils/TextTemplating";
 import { RealTimeUserPropertiesManager } from "./UserProperties/RealTimeUserPropertiesManager";
 import { combineDictionaries } from "./utils/DictionaryHelper";
 import { generateUuid } from "./utils/uuid";
+import { ICampaignState } from "./Campaigns/ICampaignState";
 export class SwrveInternal {
     public readonly profileManager: ProfileManager;
 
@@ -169,8 +170,12 @@ export class SwrveInternal {
         return { userId, firstUse, sessionStart, isQAUser };
     }
 
-    public getMessageCenterCampaigns(): ISwrveCampaign[] {
-        return this.campaignManager.getMessageCenterCampaigns();
+    public getMessageCenterCampaigns(personalizationProperties?: IDictionary<string>): ISwrveCampaign[] {
+        if (personalizationProperties) {
+            return this.campaignManager.getMessageCenterCampaigns(personalizationProperties);
+        } else {
+            return this.campaignManager.getMessageCenterCampaigns();
+        }
     }
 
     //******************************************** Embedded Campaigns ********************************************/
@@ -576,6 +581,29 @@ export class SwrveInternal {
 
     //*****************************************************************************************************************/
 
+    public showMessageCenterCampaign(
+        campaign: ISwrveCampaign,
+        personalizationProperties?: IDictionary<string>,
+    ): boolean {
+        const properties = this.retrievePersonalizationProperties(
+            {},
+            personalizationProperties,
+        );
+        return this.campaignManager.showCampaign(campaign, properties, (msg) => this.queueMessageImpressionEvent(msg.id));
+    }
+
+    public markMessageCenterCampaignAsSeen(campaign: ISwrveCampaign): void {
+        this.campaignManager.markCampaignAsSeen(campaign);
+    }
+    
+    public removeMessageCenterCampaign(campaign: ISwrveCampaign): void {
+        this.campaignManager.removeMessageCenterCampaign(campaign);
+    }
+
+    public getCampaignState(campaignId: string): ICampaignState {
+        return this.campaignManager.getCampaignState(campaignId);
+    }
+    
     public start(userId?: string): void {
         if (this.config.managedMode) {
             if (userId) {

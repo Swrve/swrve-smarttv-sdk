@@ -44,6 +44,7 @@ export const CAMPAIGN_NO_MATCH = 6;
 export const CAMPAIGN_MATCH = 7;
 export const CAMPAIGN_NOT_DOWNLOADED = 8;
 export const CAMPAIGN_ELIGIBLE_BUT_OTHER_CHOSEN = 10;
+export const CAMPAIGN_COULD_NOT_PERSONALIZE = 11;
 
 export const CAMPAIGN_STATE = "campaignState.";
 export const CAMPAIGNS = "campaigns.";

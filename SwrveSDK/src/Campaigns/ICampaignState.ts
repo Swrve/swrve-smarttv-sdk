@@ -8,6 +8,7 @@ export interface ICampaignState{
     [key: string]: string | number;
 }
 
-export type CampaignStatus = typeof SWRVE_CAMPAIGN_STATUS_UNSEEN |
-    typeof SWRVE_CAMPAIGN_STATUS_SEEN |
-    typeof SWRVE_CAMPAIGN_STATUS_DELETED;
+export type CampaignStatus =
+  | typeof SWRVE_CAMPAIGN_STATUS_UNSEEN
+  | typeof SWRVE_CAMPAIGN_STATUS_SEEN
+  | typeof SWRVE_CAMPAIGN_STATUS_DELETED;

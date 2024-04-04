@@ -11,7 +11,7 @@ import {
 } from "./ISwrveCampaign";
 import {StorageManager} from "../Storage/StorageManager";
 import {ICampaignDownloadData, IQACampaignTriggerEvent} from "../Events/EventTypeInterfaces";
-import {ICampaignState} from "./ICampaignState";
+import {CampaignStatus, ICampaignState} from "./ICampaignState";
 import {
     CAMPAIGN_NOT_ACTIVE,
     CAMPAIGN_NOT_DOWNLOADED,
@@ -29,6 +29,9 @@ import {
     CAMPAIGN_STATE,
     CAMPAIGNS,
     SWRVE_AUTOSHOW_AT_SESSION_START_TRIGGER,
+    SWRVE_CAMPAIGN_STATUS_SEEN,
+    SWRVE_CAMPAIGN_STATUS_DELETED,
+    CAMPAIGN_COULD_NOT_PERSONALIZE,
 } from "../utils/SwrveConstants";
 import {SwrveMessageDisplayManager} from "./Messages/SwrveMessageDisplayManager";
 import {AssetManager} from "./AssetManager";
@@ -418,9 +421,15 @@ export class CampaignManager
         return this.assetManager;
     }
 
-    public getMessageCenterCampaigns(): ISwrveCampaign[] {
-        return this.campaigns.filter(campaign => (campaign.message_center && campaign.messages && campaign.messages.length > 0) 
-        || (campaign.message_center && campaign.embedded_message && campaign.embedded_message.data.length > 0))
+    public getMessageCenterCampaigns(
+        personalizationProperties?: IDictionary<string>,
+    ): ISwrveCampaign[] {
+        return this.campaigns
+        .filter(campaign => 
+            (campaign.message_center && campaign.messages && campaign.messages.length > 0) || 
+            (campaign.message_center && campaign.embedded_message && campaign.embedded_message.data.length > 0) ||
+            (campaign.message_center && this.campaignState[campaign.id].status 
+                !== SWRVE_CAMPAIGN_STATUS_DELETED && this.canCampaignRender(campaign, personalizationProperties)))
                              .map(campaign => ({ ...campaign }));
     }
 
@@ -440,6 +449,30 @@ export class CampaignManager
 
                 this.messagesShownCount++;
             }
+        }
+    }
+
+    public markCampaignAsSeen(campaign: ISwrveCampaign): void {
+        this.setCampaignStatus(campaign, SWRVE_CAMPAIGN_STATUS_SEEN);
+    }
+
+    public removeMessageCenterCampaign(campaign: ISwrveCampaign): void {
+        this.setCampaignStatus(campaign, SWRVE_CAMPAIGN_STATUS_DELETED);
+    }
+
+    private setCampaignStatus(
+        campaign: ISwrveCampaign,
+        newStatus: CampaignStatus,
+    ): void {
+        if (campaign) {
+        const campaignState = this.campaignState[campaign.id];
+        campaignState.status = newStatus;
+        this.campaignState[campaign.id] = campaignState;
+
+        StorageManager.saveData(
+            CAMPAIGN_STATE + this.profileManager.currentUser.userId,
+            JSON.stringify(this.campaignState),
+        );
         }
     }
 
@@ -521,6 +554,13 @@ export class CampaignManager
             this.assetManager.ImagesCDN, 
             personalizationProperties,
         );
+
+        if (!assetsForTrigger.every((asset) => asset.canRender())) {
+            return {
+              status: CAMPAIGN_COULD_NOT_PERSONALIZE,
+              message: "Personalization failed for campaign " + parentCampaign,
+            };
+        }
 
         if (!this.assetManager.checkAssetsForCampaign(assetsForTrigger)) {
             return {
@@ -611,18 +651,18 @@ export class CampaignManager
         return assets;
     }
 
-    // private canCampaignRender(
-    //     campaign: ISwrveCampaign,
-    //     personalizationProperties?: IDictionary<string>,
-    //   ): boolean {
-    //     const assets = CampaignManager.getAllAssets(
-    //       [campaign],
-    //       this.assetManager.ImagesCDN,
-    //       personalizationProperties,
-    //     );
+    private canCampaignRender(
+        campaign: ISwrveCampaign,
+        personalizationProperties?: IDictionary<string>,
+      ): boolean {
+        const assets = CampaignManager.getAllAssets(
+          [campaign],
+          this.assetManager.ImagesCDN,
+          personalizationProperties,
+        );
     
-    //     return assets.every((asset) => asset.canRender());
-    // }
+        return assets.every((asset) => asset.canRender());
+    }
 
     private getNow(): number {
         return DateHelper.nowInUtcTime();

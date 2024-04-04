@@ -8,6 +8,7 @@ import IReadonlyDictionary from "./utils/IReadonlyDictionary";
 import { sdkVersion, GET_INSTANCE_ERROR } from './utils/SwrveConstants';
 import IReward from "./WebApi/Events/IReward";
 import { ISwrveEmbeddedMessage } from "./Campaigns/ISwrveCampaign";
+import { ICampaignState } from './Campaigns/ICampaignState';
 
 let swrveInternal: SwrveInternal | null = null;
 
@@ -26,6 +27,9 @@ export class SwrveSDK {
     private static _instance: SwrveSDK|null = null;
 
     public static createInstance(config: ISwrveConfig): SwrveSDK {
+        if (config.apiKey.toLowerCase().startsWith("secret-")) {
+            throw Error(`API Key ${config.apiKey} is invalid. It should not start with 'secret-'`);
+        }
         if (SwrveSDK._instance) {
             return SwrveSDK._instance;
         } else {
@@ -102,10 +106,6 @@ export class SwrveSDK {
 
     public static getUserInfo(): IUserInfo {
         return SwrveSDK.checkInstance().getUserInfo();
-    }
-
-    public static getMessageCenterCampaigns(): ISwrveCampaign[] {
-        return SwrveSDK.checkInstance().getMessageCenterCampaigns();
     }
 
     public static getSDKVersion(): string {
@@ -189,6 +189,40 @@ export class SwrveSDK {
 
     public static stop(): void {
         SwrveSDK.checkInstance().stop();
+    }
+
+    //*************************************** Message Center *******************************//
+
+    public static getMessageCenterCampaigns(
+        personalizationProperties?: IDictionary<string>,
+    ): ISwrveCampaign[] {
+        return SwrveSDK.checkInstance().getMessageCenterCampaigns(
+            personalizationProperties,
+        );
+    }
+
+    public static showMessageCenterCampaign(
+        campaign: ISwrveCampaign,
+        personalizationProperties?: IDictionary<string>,
+    ): boolean {
+        return SwrveSDK.checkInstance().showMessageCenterCampaign(
+            campaign,
+            personalizationProperties,
+        );
+    }
+
+    public static markMessageCenterCampaignAsSeen(
+        campaign: ISwrveCampaign,
+    ): void {
+        SwrveSDK.checkInstance().markMessageCenterCampaignAsSeen(campaign);
+    }
+
+    public static removeMessageCenterCampaign(campaign: ISwrveCampaign): void {
+        SwrveSDK.checkInstance().removeMessageCenterCampaign(campaign);
+    }
+
+    public static getCampaignState(campaignId: string): ICampaignState {
+        return SwrveSDK.checkInstance().getCampaignState(campaignId);
     }
 
     //*************************************** Other ************************************//
