@@ -16,6 +16,7 @@ import {
     OnCampaignLoadedCallback,
     OnCustomButtonClicked,
     OnIAMDismissed,
+    OnIdentifySuccessCallback,
     OnIdentifyErrorCallback,
     OnMessageListener,
     OnResourcesLoadedCallback,
@@ -69,12 +70,18 @@ export class SwrveInternal {
     private identifyNetworkMonitorHandle?: NetworkListener;
     private campaignNetworkMonitorHandle?: NetworkListener;
     private identifiedOnAnotherDevice: boolean = false;
+    private refreshAssets: boolean = true;
 
     public constructor(config: Readonly<ISwrveConfig>, dependencies?: IDependencies) {
         dependencies = dependencies || {};
 
-        this.platform = dependencies.platform || PAL.getPlatform();
+        this.platform = config.customPlatform || dependencies.platform || PAL.getPlatform(config);
 
+        if (PAL.platform !== undefined) {
+            //in case it was custom, set the static instance in PAl, as asset /campaign /storage managers reference it.
+            PAL.platform = this.platform;
+        }
+        
         this.loadInstallDate();
   
         let lastUserId = StorageManager.getData(
@@ -152,7 +159,7 @@ export class SwrveInternal {
         if (this.isIdentifyCallPending()) {
             const externalId = StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING_EXTERNAL_ID)!;
             const swrveId = StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING)!;
-            this.makeIdentityCall(externalId, this.profileManager.currentUser.userId, swrveId, () => this.initSDK());
+            this.makeIdentityCall(externalId, this.profileManager.currentUser.userId, swrveId, () => {}, () => this.initSDK());
         } else if (this.config.managedMode) {
             SwrveLogger.debug("SwrveSDK: This application has started Swrve in MANAGED mode. Call start() to begin tracking");
             this.stop();
@@ -176,6 +183,10 @@ export class SwrveInternal {
         } else {
             return this.campaignManager.getMessageCenterCampaigns();
         }
+    }
+
+    public getPlatform(): IPlatform {
+        return this.platform;
     }
 
     //******************************************** Embedded Campaigns ********************************************/
@@ -415,7 +426,9 @@ export class SwrveInternal {
         this.evtManager.saveEventsToStorage(this.profileManager.currentUser.userId);
     }
 
-    public identify(thirdPartyLoginId: string | null, onIdentifyError: OnIdentifyErrorCallback): void {
+    public identify(externalUserId: string | null, 
+                    onIdentifySuccess: OnIdentifySuccessCallback,
+                    onIdentifyError: OnIdentifyErrorCallback): void {
         if (this.config.managedMode) {
             SwrveLogger.error("SwrveSDK: identify() cannot be called when MANAGED mode is enabled. Use start() instead.");
             return;
@@ -426,13 +439,13 @@ export class SwrveInternal {
 
         const previousSwrveId: string = this.profileManager.currentUser.userId;
 
-        if (thirdPartyLoginId === "" || thirdPartyLoginId == null) {
+        if (externalUserId === "" || externalUserId == null) {
             this.createAnonymousUser();
             this.startNewSession();
             return;
         }
 
-        const cachedSwrveUserId = this.profileManager.getSwrveIdByThirdPartyId(thirdPartyLoginId);
+        const cachedSwrveUserId = this.profileManager.getSwrveIdByThirdPartyId(externalUserId);
         if (cachedSwrveUserId) {
             this.pauseSDK = false;
             if (cachedSwrveUserId !== this.profileManager.currentUser.userId) {
@@ -445,7 +458,7 @@ export class SwrveInternal {
             }
             
             const swrveId = this.profileManager.currentUser.userId;
-            this.makeIdentityCall(thirdPartyLoginId, previousSwrveId, swrveId, onIdentifyError);
+            this.makeIdentityCall(externalUserId, previousSwrveId, swrveId, onIdentifySuccess, onIdentifyError);
         }
     }
 
@@ -529,23 +542,14 @@ export class SwrveInternal {
             .then(resources => {
                 if (resources) {
                     SwrveLogger.info("RESOURCES READILY AVAILABLE");
-                    callback(resources);
+                    if (callback) {
+                        callback(resources);
+                    }
                 } else {
-                    SwrveLogger.info("RESOURCES NEED TO BE RETRIEVED");
-                    this.profileManager.clearEtagHeader();
-                    this.restClient.getCampaignsAndResources()
-                        .then(response => {
-                            this.handleCampaignResponse(response);
-                            if (callback) {
-                                callback(this.resourceManager.getResourceManager().getResources() || []);
-                            }
-                        })
-                        .catch((error) => {
-                            SwrveLogger.warn("getCampaigns failed ", error);
-                            if (callback) {
-                                callback([]);
-                            }
-                        });
+                    SwrveLogger.info("NO RESOURCES AVAILABLE");
+                    if (callback) {
+                        callback([]);
+                    }
                 }
             });
     }
@@ -656,7 +660,6 @@ export class SwrveInternal {
         this._shutdown = true;
         this.evtManager.saveEventsToStorage(this.profileManager.currentUser.userId);
         clearTimeout(this.eventLoopTimer);
-        this.profileManager.clearEtagHeader();
 
         const qa = this.profileManager.QAUser;
         if (qa && qa.reset_device_state === true) {
@@ -743,8 +746,11 @@ export class SwrveInternal {
         }
     }
 
-    private makeIdentityCall(thirdPartyLoginId: string, previousSwrveId: string, 
-                             swrveId: string, onIdentifyError: OnIdentifyErrorCallback): void {
+    private makeIdentityCall(thirdPartyLoginId: string, 
+                             previousSwrveId: string, 
+                             swrveId: string, 
+                             onIdentifySuccess: OnIdentifySuccessCallback,
+                             onIdentifyError: OnIdentifyErrorCallback): void {
         this.identifiedOnAnotherDevice =  false; // reset the flag
         this.restClient.identify(thirdPartyLoginId, swrveId)
             .then((response) => {
@@ -765,10 +771,11 @@ export class SwrveInternal {
                 }
                 
                 ProfileManager.setUserIdAsVerified(this.profileManager.currentUser.userId);
+                onIdentifySuccess(response.status, response.swrve_id);
             })
             .catch(error => {
                 SwrveLogger.info("Identify error" + error);
-                this.handleIdentifyOffline(thirdPartyLoginId, previousSwrveId, swrveId, onIdentifyError);
+                this.handleIdentifyOffline(thirdPartyLoginId, previousSwrveId, swrveId, onIdentifySuccess, onIdentifyError);
 
                 this.pauseSDK = false;
                 if (onIdentifyError) {
@@ -777,8 +784,11 @@ export class SwrveInternal {
             });
     }
 
-    private handleIdentifyOffline(thirdPartyLoginId: string, previousSwrveId: string, 
-                                  swrveId: string, onIdentifyError: OnIdentifyErrorCallback): void {
+    private handleIdentifyOffline(thirdPartyLoginId: string, 
+                                  previousSwrveId: string, 
+                                  swrveId: string, 
+                                  onIdentifySuccess: OnIdentifySuccessCallback,
+                                  onIdentifyError: OnIdentifyErrorCallback): void {
         const existingThirdPartyLoginId = StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING_EXTERNAL_ID);
         if (existingThirdPartyLoginId && existingThirdPartyLoginId !== thirdPartyLoginId) {
             this.evtManager.clearQueueAndStorage(this.profileManager.currentUser.userId);
@@ -791,7 +801,7 @@ export class SwrveInternal {
                 if (state === NETWORK_CONNECTED) {
                     SwrveLogger.info("connected");
                     this.makeIdentityCall(StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING_EXTERNAL_ID)!, 
-                    previousSwrveId, swrveId, onIdentifyError);
+                    previousSwrveId, swrveId, onIdentifySuccess, onIdentifyError);
                 }
             });
         }
@@ -911,20 +921,35 @@ export class SwrveInternal {
 
     private handleCampaignResponse(response: IRestResponse<ISwrveCampaignResourceResponse>): void {
         if (Object.keys(response.json).length !== 0) {
-            this.campaignManager.storeCampaigns(response.json, () => {
+            this.campaignManager.storeCampaigns(response.json, (error?: Error) => {
                 SwrveLogger.debug("ON ASSETS LOADED");
+                this.refreshAssets = false;
                 this.autoShowMessages();
+
+                if (this.onCampaignLoadedCallback) {
+                    this.onCampaignLoadedCallback(error);
+                }
             });
             this.handleRealTimeUserProperties(response.json);
             this.handleQAUser(response.json);
             this.handleFlushRefresh(response.json);
-
-            if (this.onCampaignLoadedCallback) {
-                this.onCampaignLoadedCallback();
-            }
-
+            
             if (this.profileManager.isQAUser()) {
                 this.sendCampaignsDownloadedEvent();
+            }
+        } else {
+            //if etag takes affect and no campaigns to update
+            //then we still want to refresh assets just once on the first launch
+            if (this.refreshAssets) {
+                SwrveLogger.debug("Refresh Assets");
+                this.refreshAssets = false;
+                this.campaignManager.refreshAssets((error?: Error) => { 
+                    SwrveLogger.debug("ON ASSETS LOADED");
+                    //campaigns wil have already been loaded from storage on init
+                    if (this.onCampaignLoadedCallback) {
+                        this.onCampaignLoadedCallback(error);
+                    } 
+                });
             }
         }
         this.handleResources(response.json);

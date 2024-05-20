@@ -1,4 +1,6 @@
 import { APP_ID_ERROR } from "../utils/SwrveConstants";
+import { IKeyMapping } from "../utils/platforms/IKeymapping";
+import { IPlatform } from "../utils/platforms/IPlatform";
 import {ICSSStyle, ISwrveEmbeddedMessageConfig, OnPersonalizationProvider} from "./ISwrveConfig";
 
 export type SwrveStack = "us" | "eu";
@@ -24,7 +26,9 @@ export interface ISwrveInternalConfig
     readonly managedMode?: boolean;
     readonly embeddedMessageConfig?: ISwrveEmbeddedMessageConfig;
     readonly personalizationProvider?: OnPersonalizationProvider;
-
+    readonly customPlatform?: IPlatform;
+    readonly customKeyMappingTizen?: IKeyMapping;
+    readonly customKeyMappingWebOS?: IKeyMapping;
 }
 
 export function validateConfig(config: ISwrveInternalConfig): void {

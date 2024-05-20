@@ -48,7 +48,7 @@ import DateHelper from "../utils/DateHelper";
 import { OnEmbeddedMessageListener } from "../Config/ISwrveConfig";
 import IDictionary from "../utils/IDictionary";
 
-export type OnAssetsLoaded = () => void;
+export type OnAssetsLoaded = (error?: Error) => void;
 
 export interface ICampaignRuleStatus {
     status: number;
@@ -90,9 +90,9 @@ export class CampaignManager
     constructor(public profileManager: ProfileManager, platform: IPlatform,
                 config?: ISwrveInternalConfig, resourceManager?: ResourceManager,
     ) {
+        this.assetManager = new AssetManager();
         this.loadStoredCampaigns(this.profileManager.currentUser.userId);
         this.messageDisplayManager = new SwrveMessageDisplayManager(platform, config, resourceManager);
-        this.assetManager = new AssetManager();
         this.platform = platform;
     }
 
@@ -109,8 +109,12 @@ export class CampaignManager
             this.parseTriggers(this.campaigns);
             this.synchronizeCampaignState();
             this.handleAssets(onAssetsLoaded);
-            StorageManager.saveData(CAMPAIGNS + this.profileManager.currentUser.userId, JSON.stringify(this.campaigns));
+            StorageManager.saveData(CAMPAIGNS + this.profileManager.currentUser.userId, JSON.stringify(response));
         }
+    }
+
+    public refreshAssets(onAssetsLoaded: OnAssetsLoaded): void {
+        this.handleAssets(onAssetsLoaded);
     }
 
     public resetCampaignState(): void {
@@ -127,17 +131,23 @@ export class CampaignManager
 
         const storedCampaigns = StorageManager.getData(CAMPAIGNS + userId);
         if (storedCampaigns) {
-            this.campaigns = JSON.parse(storedCampaigns);
+            const response: ISwrveCampaignResourceResponse = JSON.parse(storedCampaigns);
+            //check it has expected structure
+            if (response && response.campaigns && response.campaigns.campaigns !== undefined) {
+                this.handleCDN(response);
+                this.campaigns = response.campaigns.campaigns || [];
+        
+                if (this.campaigns) {
+                    this.parseGlobalRules(response.campaigns);
+                    this.parseMessages(this.campaigns);
+                    this.parseTriggers(this.campaigns);
+                }
+            }
         }
 
         const campaignState = StorageManager.getData(CAMPAIGN_STATE + userId);
         if (campaignState) {
             this.campaignState = JSON.parse(campaignState);
-        }
-
-        if (this.campaigns) {
-            this.parseMessages(this.campaigns);
-            this.parseTriggers(this.campaigns);
         }
     }
 
@@ -620,6 +630,7 @@ export class CampaignManager
             })
             .catch(error => {
                 SwrveLogger.info("Error downloading assets " + error);
+                onAssetsLoaded(error);
             });
     }
 

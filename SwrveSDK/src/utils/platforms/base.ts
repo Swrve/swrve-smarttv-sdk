@@ -71,6 +71,12 @@ export default class BasePlatform implements IPlatform {
   protected networkMonitorHandle?: NetworkMonitorHandle;
   protected networkListeners: NetworkListener[] = [];
 
+  protected defaultMapping: IKeyMapping;
+
+  constructor(customMapping?: IKeyMapping) {
+      this.defaultMapping = customMapping ?? defaultMapping;
+  }
+
   public name(): IPlatformName {
     return {
       name: "Browser",
@@ -262,14 +268,14 @@ export default class BasePlatform implements IPlatform {
 
   public get screenHeight(): number {
       if (this._screenHeight === undefined) {
-          this._screenHeight = typeof navigator !== "undefined" ? screen.height : 0;
+          this._screenHeight = typeof navigator !== "undefined" ? window.innerHeight : 0;
       }
       return this._screenHeight || 0;
   }
 
   public get screenWidth(): number {
     if (this._screenWidth === undefined) {
-        this._screenWidth = typeof navigator !== "undefined" ? screen.width : 0;
+        this._screenWidth = typeof navigator !== "undefined" ? window.innerWidth : 0;
     }
     return this._screenWidth || 0;
   }
@@ -279,7 +285,7 @@ export default class BasePlatform implements IPlatform {
   }
 
   public getKeymapping(): IKeyMapping {
-    return defaultMapping;
+    return this.defaultMapping;
   }
 
   protected triggerNetworkChange(status: NetworkStatus): void {

@@ -9,35 +9,41 @@ import {
 import { IKeyMapping } from "./IKeymapping";
 import SwrveLogger from "../SwrveLogger";
 
-const tizenMapping = {
-    38: "Up",
-    40: "Down",
-    37: "Left",
-    39: "Right",
-    13: "Enter",
-    403: "ColorF0Red",
-    404: "B",
-    405: "C",
-    406: "D",
-    10009: "Back",
-    415: "Play",
-    417: "FastForward",
-    412: "Rewind",
-    413: "Stop",
-    10252: "PlayPause",
-    19: "Pause",
-    65376: "Done",
-    65385: "Cancel",
-};
-
 /**
  * Samsung platform
  */
 export default class SamsungPlatform extends BasePlatform {
-    constructor() {
+    protected tizenKeyMapping: IKeyMapping;
+
+    constructor(customKeyMapping?: IKeyMapping) {
         super();
         // this platform does not need a proxy.
         this.needsProxy = false;
+        
+        if (customKeyMapping) {
+            this.tizenKeyMapping = customKeyMapping;
+        } else {
+            this.tizenKeyMapping = {
+                38: "Up",
+                40: "Down",
+                37: "Left",
+                39: "Right",
+                13: "Enter",
+                403: "ColorF0Red",
+                404: "B",
+                405: "C",
+                406: "D",
+                10009: "Back",
+                415: "Play",
+                417: "FastForward",
+                412: "Rewind",
+                413: "Stop",
+                10252: "PlayPause",
+                19: "Pause",
+                65376: "Done",
+                65385: "Cancel",
+            };
+        }
     }
 
     public name(): IPlatformName {
@@ -170,7 +176,7 @@ export default class SamsungPlatform extends BasePlatform {
     }
 
     public getKeymapping(): IKeyMapping {
-        return tizenMapping;
+        return this.tizenKeyMapping;
     }
 
     public supportsHDR(): boolean {

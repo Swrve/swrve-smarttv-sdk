@@ -9,23 +9,36 @@ import {
 } from "./IPlatform";
 import SwrveLogger from "../SwrveLogger";
 
-const webOSMapping = {
-    36: "Return",
-    38: "Up",
-    40: "Down",
-    37: "Left",
-    39: "Right",
-    13: "Enter",
-    8: "Return",
-    413: "Stop",
-    417: "FastForward",
-    412: "Rewind",
-    415: "Play",
-    19: "Pause",
-    461: "Back",
-};
-
 export default class WebOSPlatform extends BasePlatform {
+
+    protected webOSKeyMapping: IKeyMapping;
+
+    constructor(customKeyMapping?: IKeyMapping) {
+        super();
+        // this platform does not need a proxy.
+        this.needsProxy = false;
+        
+        if (customKeyMapping) {
+            this.webOSKeyMapping = customKeyMapping;
+        } else {
+            this.webOSKeyMapping = {
+                36: "Return",
+                38: "Up",
+                40: "Down",
+                37: "Left",
+                39: "Right",
+                13: "Enter",
+                8: "Return",
+                413: "Stop",
+                417: "FastForward",
+                412: "Rewind",
+                415: "Play",
+                19: "Pause",
+                461: "Back",
+            };
+        }
+    }
+
     public name(): IPlatformName {
         return {
             name: "LG",
@@ -42,7 +55,7 @@ export default class WebOSPlatform extends BasePlatform {
     }
 
     public getKeymapping(): IKeyMapping {
-        return webOSMapping;
+        return this.webOSKeyMapping;
     }
 
     public get timezone(): string {

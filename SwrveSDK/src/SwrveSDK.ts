@@ -9,15 +9,18 @@ import { sdkVersion, GET_INSTANCE_ERROR } from './utils/SwrveConstants';
 import IReward from "./WebApi/Events/IReward";
 import { ISwrveEmbeddedMessage } from "./Campaigns/ISwrveCampaign";
 import { ICampaignState } from './Campaigns/ICampaignState';
+import { IPlatform } from './utils/platforms/IPlatform';
 
 let swrveInternal: SwrveInternal | null = null;
 
 export type OnResourcesLoadedCallback = (resources: ReadonlyArray<IUserResource> | null) => void;
-export type OnCampaignLoadedCallback = () => void;
+export type OnCampaignLoadedCallback = (error?: Error) => void;
 export type GetResourcesCallback = (resources: ReadonlyArray<IUserResource>) => void;
 export type GetUserResourcesDiffCallback = (oldDictionary: IDictionary<IUserResource>,
                                             newDictionary: IDictionary<IUserResource>,
                                             json: any) => any;
+export type OnIdentifySuccessCallback = (status: string, 
+                                         swrveUserId: string) => void;
 export type OnIdentifyErrorCallback = (error: string) => void;
 export type OnMessageListener = (msg: ISwrveBaseMessage) => void;
 export type OnIAMDismissed = () => void;
@@ -170,7 +173,19 @@ export class SwrveSDK {
         SwrveSDK.checkInstance().sendQueuedEvents();
     }
 
-    //*************************************** Lifecycle Management ************************************//
+  //*************************************** Lifecycle / Account Management ************************************//
+
+    public static identify(
+        externalUserId: string,
+        onIdentifySuccess: OnIdentifySuccessCallback,
+        onIdentifyError: OnIdentifyErrorCallback,
+      ): void {
+        SwrveSDK.checkInstance().identify(
+          externalUserId,
+          onIdentifySuccess,
+          onIdentifyError,
+        );
+      }
 
     public static start(userId?: string): void {
         SwrveSDK.checkInstance().start(userId);
@@ -227,15 +242,15 @@ export class SwrveSDK {
 
     //*************************************** Other ************************************//
 
-    public static identify(thirdPartyLoginId: string, onIdentifyError: OnIdentifyErrorCallback): void {
-        SwrveSDK.checkInstance().identify(thirdPartyLoginId, onIdentifyError);
-    }
-
     public static saveToStorage(): void {
         SwrveSDK.checkInstance().saveToStorage();
     }
 
     public static showCampaign(campaign: ISwrveCampaign): boolean {
         return SwrveSDK.checkInstance().showCampaign(campaign);
+    }
+
+    public static getPlatform(): IPlatform {
+        return SwrveSDK.checkInstance().getPlatform();
     }
 }
