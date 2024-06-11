@@ -29,6 +29,7 @@ export interface ISwrveInternalConfig
     readonly customPlatform?: IPlatform;
     readonly customKeyMappingTizen?: IKeyMapping;
     readonly customKeyMappingWebOS?: IKeyMapping;
+    readonly customKeyMappingBase?: IKeyMapping;
 }
 
 export function validateConfig(config: ISwrveInternalConfig): void {

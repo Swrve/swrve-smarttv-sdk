@@ -440,18 +440,25 @@ export class SwrveInternal {
         const previousSwrveId: string = this.profileManager.currentUser.userId;
 
         if (externalUserId === "" || externalUserId == null) {
-            this.createAnonymousUser();
-            this.startNewSession();
+            this.pauseSDK = false;
+            SwrveLogger.error("Swrve identify: External user id cannot be nil or empty");
+            if (onIdentifyError !== undefined) {
+                onIdentifyError("External user id cannot be nil or empty");
+            }
             return;
         }
 
         const cachedSwrveUserId = this.profileManager.getSwrveIdByThirdPartyId(externalUserId);
         if (cachedSwrveUserId) {
             this.pauseSDK = false;
+            SwrveLogger.info("Identity API call skipped, user loaded from cache: ", this.profileManager.currentUser.userId);
             if (cachedSwrveUserId !== this.profileManager.currentUser.userId) {
                 this.verifyAndSwitchUser(cachedSwrveUserId);
             }
-        } else {
+            if (onIdentifySuccess) {
+                onIdentifySuccess("Identity API call skipped, user loaded from cache", this.profileManager.currentUser.userId);
+            }
+         } else {
             if (ProfileManager.isUserIdVerified(this.profileManager.currentUser.userId)
                 || (!this.profileManager.currentUser.isAnonymous)) {
                 this.createAnonymousUser();
@@ -764,6 +771,8 @@ export class SwrveInternal {
                 } else if (response.status === SwrveConstants.EXISTING_EXTERNAL_ID) {
                     this.identifiedOnAnotherDevice =  true;
                     this.verifyAndSwitchUser(response.swrve_id);
+                } else {
+                    this.pauseSDK = false;
                 }
 
                 if (this.isIdentifyCallPending()) {
@@ -771,7 +780,9 @@ export class SwrveInternal {
                 }
                 
                 ProfileManager.setUserIdAsVerified(this.profileManager.currentUser.userId);
-                onIdentifySuccess(response.status, response.swrve_id);
+                if (onIdentifySuccess) {
+                    onIdentifySuccess(response.status, response.swrve_id);
+                }
             })
             .catch(error => {
                 SwrveLogger.info("Identify error" + error);

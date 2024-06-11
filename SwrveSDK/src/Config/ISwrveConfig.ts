@@ -28,6 +28,7 @@ export default interface ISwrveConfig {
     personalizationProvider?: OnPersonalizationProvider;
     customKeyMappingTizen?: IKeyMapping;
     customKeyMappingWebOS?: IKeyMapping;
+    customKeyMappingBase?: IKeyMapping;
     customPlatform?: IPlatform;
 }
 

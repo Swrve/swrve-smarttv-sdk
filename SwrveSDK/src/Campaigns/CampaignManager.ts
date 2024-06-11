@@ -117,18 +117,24 @@ export class CampaignManager
         this.handleAssets(onAssetsLoaded);
     }
 
-    public resetCampaignState(): void {
-        this.campaigns = [];
-        this.messages = [];
-        this.triggers = [];
+    public resetCampaignState(clearCampaigns: boolean = true): void {
+        if (clearCampaigns) {
+            this.campaigns = [];
+            this.messages = [];
+            this.triggers = [];
+        }
+
         this.campaignState = {};
         this.messagesShownCount = 0;
         this.lastShownMessageTime = 0;
     }
-
+    //this is called when the SDK is initialized and when the user is switched  
     public loadStoredCampaigns(userId: string): void {
-        this.resetCampaignState();
+        SwrveLogger.debug("Load stored campaigns: " + userId); 
 
+        // dont clear campaigns array, they will be replaced below, if in storage for user.
+        this.resetCampaignState(false);
+       
         const storedCampaigns = StorageManager.getData(CAMPAIGNS + userId);
         if (storedCampaigns) {
             const response: ISwrveCampaignResourceResponse = JSON.parse(storedCampaigns);
@@ -142,7 +148,11 @@ export class CampaignManager
                     this.parseMessages(this.campaigns);
                     this.parseTriggers(this.campaigns);
                 }
+            } else {
+                SwrveLogger.debug("Campaign JSON empty, no campaigns downloaded"); 
             }
+        } else {
+            SwrveLogger.debug("Unable to load stored campaigns");
         }
 
         const campaignState = StorageManager.getData(CAMPAIGN_STATE + userId);
@@ -345,7 +355,9 @@ export class CampaignManager
                                     if (campaign.messages && campaign.messages.length > 0) {
                                       this.showMessage(selectedMessage as ISwrveMessage, campaign, personalizationProperties);
                                       this.updateCampaignState(selectedMessage);
-                                      impressionCallback(selectedMessage);
+                                      if (impressionCallback) {
+                                        impressionCallback(selectedMessage as ISwrveMessage);
+                                      }
                                       break;
                                     }
                     
@@ -365,14 +377,9 @@ export class CampaignManager
                                   }
                             }
                         }
-
-                        this.updateCampaignState(selectedMessage);
-                        if (impressionCallback) {
-                            impressionCallback(selectedMessage as ISwrveMessage);
-                        }
                     }
                 }
-            } else  if (qa) {
+            } else if (qa) {
                 globalStatus = { status: CAMPAIGN_NO_MATCH, message: "No matching campaigns." };
             }
         }

@@ -32,7 +32,7 @@ export default class PAL {
         ) {
             PAL.platform = (config !== undefined) ? new WebOS(config.customKeyMappingWebOS) : new WebOS();
         } else {
-            PAL.platform = new Base();
+            PAL.platform = (config !== undefined) ? new Base(config.customKeyMappingBase) : new Base();
         }
 
         return PAL.platform;
