@@ -1,6 +1,7 @@
 import {
     ISwrveButton, ISwrveCampaign, ISwrveFormat, ISwrveImage, ISwrveMessage,
 } from "../ISwrveCampaign";
+import * as SwrveConstants from "../../utils/SwrveConstants";
 import {IPlatform} from "../../utils/platforms/IPlatform";
 import {DEFAULT_IAM_STYLE, IAM_CSS_CLASS_NAME, SWRVE_IAM_CONTAINER} from "../../utils/SwrveConstants";
 import SwrveFocusManager from "../../UIElements/SwrveFocusManager";
@@ -9,8 +10,11 @@ import {IKeyMapping} from "../../utils/platforms/IKeymapping";
 import IDictionary from "../../utils/IDictionary";
 import {ResourceManager} from "../../Resources/ResourceManager";
 import {ICSSStyle} from "../../Config/ISwrveConfig";
+import SwrveLogger from "../../utils/SwrveLogger";
+import { TextTemplating } from "../../utils/TextTemplating";
 
-export type OnButtonClicked = (button: ISwrveButton, parentCampaign: ISwrveCampaign) => void;
+export type OnButtonClicked = (button: ISwrveButton, parentCampaign: ISwrveCampaign, pageId: string, pageName: string) => void;
+export type OnPageViewed = (messageId: number, pageId: number, pageName: string) => void;
 
 interface IAMButton {
     button: ISwrveButton;
@@ -42,6 +46,7 @@ export class SwrveMessageDisplayManager {
     private screenCenterWidth: number = 0;
     private screenCenterHeight: number = 0;
     private onButtonClickedCallback: OnButtonClicked | null = null;
+    private onPageViewedCallback: OnPageViewed | null = null;
     private isOpen: boolean = false;
     private justClosed: boolean = false;
     private focusManager?: SwrveFocusManager<IAMButton>;
@@ -50,6 +55,14 @@ export class SwrveMessageDisplayManager {
     private focusStyle?: ICSSStyle | string;
     private overrideIAMStyle?: string;
     private keymap: IKeyMapping;
+
+    private currentPageIndex: number = 0;
+    private currentMessagePages: any[] = [];
+    private sentPageViewEvents: number[] = [];
+    private sentNavigationEvents: number[] = [];
+    private imagesCDN: string = "";
+    private scale: number = 1;
+    private personalizationProperties?: IDictionary<string>;
 
     constructor(platform: IPlatform, config?: ISwrveInternalConfig, resourceManager?: ResourceManager) {
         this.normalStyle = config && config.inAppMessageButtonStyle;
@@ -62,24 +75,39 @@ export class SwrveMessageDisplayManager {
     }
 
     public showMessage(
-        message: ISwrveMessage, 
-        parentCampaign: ISwrveCampaign, 
-        imagesCDN: string, 
+        message: ISwrveMessage,
+        parentCampaign: ISwrveCampaign,
+        imagesCDN: string,
         platform: IPlatform,
         personalizationProperties?: IDictionary<string>,
     ): void {
-          this.screenCenterWidth = platform.screenWidth / 2;
-          this.screenCenterHeight = platform.screenHeight / 2;
+        this.currentPageIndex = 0;
+        this.currentMessagePages = [];
+        this.sentPageViewEvents = [];
+        this.sentNavigationEvents = [];
+        this.screenCenterWidth = platform.screenWidth / 2;
+        this.screenCenterHeight = platform.screenHeight / 2;
+        this.personalizationProperties = personalizationProperties;
 
-          const iam = this.getLandscapeFormat(message);
-          if (iam) {
-              this.isOpen = true;
-              this.createContainer(message.name, iam.color || undefined);
-              this.appendImages(iam.images, imagesCDN, iam.scale);
-              const buttons = this.appendButtons(iam.buttons, parentCampaign, imagesCDN, iam.scale);
-              this.focusManager = this.createFocusManager(buttons);
-              this.focusManager.setActiveFirst();
-          }
+        const iam = this.getLandscapeFormat(message);
+        if (!iam) return;
+
+        this.isOpen = true;
+        this.imagesCDN = imagesCDN || '';
+        this.scale = iam.scale ?? 1;
+
+        this.createContainer(message.name, iam.color || undefined);
+
+        if (iam.pages && iam.pages?.length > 0) {
+            this.currentMessagePages = iam.pages;
+            this.renderPage(this.currentPageIndex, parentCampaign);
+        } else {
+            this.renderContent(iam.images, iam.buttons, parentCampaign);
+        }
+    }
+
+    public onPageViewed(callback: OnPageViewed): void {
+        this.onPageViewedCallback = callback;
     }
 
     public onButtonClicked(callback: OnButtonClicked): void {
@@ -88,6 +116,14 @@ export class SwrveMessageDisplayManager {
 
     public isIAMShowing(): boolean {
         return this.isOpen;
+    }
+
+    public getSentPageViewEvents(): number[] {
+        return this.sentPageViewEvents;
+    }
+
+    public getSentNavigationEvents(): number[] {
+        return this.sentNavigationEvents;
     }
 
     public closeMessage(): void {
@@ -143,7 +179,6 @@ export class SwrveMessageDisplayManager {
 
     private getLandscapeFormat(message: ISwrveMessage): ISwrveFormat | null {
         const formats = message.template.formats || null;
-
         if (formats) {
             let landscape: ISwrveFormat | null = null;
 
@@ -157,18 +192,6 @@ export class SwrveMessageDisplayManager {
         } else {
             return null;
         }
-    }
-
-    private createContainer(name: string, color?: string): void {
-        const iamContainer = document.createElement("div");
-
-        iamContainer.id = SWRVE_IAM_CONTAINER;
-        iamContainer.className = IAM_CSS_CLASS_NAME;
-
-        iamContainer.innerHTML = this.overrideIAMStyle || DEFAULT_IAM_STYLE;
-        iamContainer.style.backgroundColor = color || "";
-
-        document.body.appendChild(iamContainer);
     }
 
     private createFocusManager(buttons: ReadonlyArray<IAMButton>): SwrveFocusManager<IAMButton> {
@@ -219,29 +242,46 @@ export class SwrveMessageDisplayManager {
         return ret;
     }
 
-    private appendImages(images: ReadonlyArray<ISwrveImage>, cdn: string, scale: number): void {
+    private appendImages(images: ReadonlyArray<ISwrveImage>): void {
         images.forEach((image, index) => {
             const imageElement = document.createElement("img");
 
             imageElement.id = "SwrveImage" + index;
-            imageElement.src = cdn + image.image.value as string;
+            if (image.dynamic_image_url && image.dynamic_image_url.length > 0) {
+                if (this.personalizationProperties) {
+                    imageElement.src = this.personalizeText(image.dynamic_image_url, this.personalizationProperties) ?? "";
+                } else {
+                    imageElement.src = image.dynamic_image_url;
+                }
+            } else {
+                imageElement.src = this.imagesCDN + image.image.value as string;
+            }
 
-            this.addElement(image, imageElement, scale);
+            this.addElement(image, imageElement);
         });
     }
 
-    private appendButtons(buttons: ReadonlyArray<ISwrveButton>, parentCampaign: ISwrveCampaign, cdn: string, scale: number): IAMButton[] {
+    private appendButtons(
+        buttons: ReadonlyArray<ISwrveButton>, parentCampaign: ISwrveCampaign): IAMButton[] {
         return buttons.map((button, index) => {
             const buttonElement = document.createElement("img");
             const buttonStyle = this.getFocusStyle(this.normalStyle, defaultStyle);
 
+            const personalizedButton = this.personalizeButton(button);
+
             buttonElement.id = "SwrveButton" + index;
-            buttonElement.src = cdn + button.image_up.value as string;
+            if (personalizedButton.dynamic_image_url && personalizedButton.dynamic_image_url.length > 0) {
+                buttonElement.src = personalizedButton.dynamic_image_url;
+            } else {
+                buttonElement.src = this.imagesCDN + personalizedButton.image_up.value as string;
+            }
+
             buttonElement.style.border = "0px";
-            buttonElement.onclick = () => this.handleButton(button, parentCampaign);
+
+            buttonElement.onclick = () => this.handleButton(personalizedButton, parentCampaign);
 
             this.applyElementStyle(buttonElement, buttonStyle);
-            this.addElement(button, buttonElement, scale);
+            this.addElement(button, buttonElement);
 
             return {
                 button,
@@ -251,11 +291,25 @@ export class SwrveMessageDisplayManager {
         });
     }
 
-    private addElement(swrveItem: ISwrveButton | ISwrveImage, element: HTMLImageElement, scale: number): void {
+    private addElement(swrveItem: ISwrveButton | ISwrveImage, element: HTMLImageElement): void {
         if (typeof swrveItem.x.value === "number" && typeof swrveItem.y.value === "number") {
             const container = document.getElementById(SWRVE_IAM_CONTAINER);
-            const width = element.naturalWidth * scale;
-            const height = element.naturalHeight * scale;
+            let width = element.naturalWidth * this.scale;
+            let height = element.naturalHeight * this.scale;
+            
+            if (swrveItem.dynamic_image_url) {
+                width = swrveItem.w.value as number * this.scale;
+                height = swrveItem.h.value as number * this.scale;
+
+                //Aspect fit
+                const aspectRatio = element.naturalWidth / element.naturalHeight;
+                if (width / height > aspectRatio) {
+                    width = height * aspectRatio;
+                } else {
+                    height = width / aspectRatio;
+                }
+            }
+    
             const yPos = swrveItem.y.value;
             const xPos = swrveItem.x.value;
 
@@ -269,14 +323,158 @@ export class SwrveMessageDisplayManager {
             element.style.top = (yPos + (this.screenCenterHeight - (height / 2))).toString() + "px";
             element.style.left = (xPos + (this.screenCenterWidth - (width / 2))).toString() + "px";
 
+            if (swrveItem.accessibility_text) {
+                if (this.personalizationProperties) {
+                    const personalizedAltText = this.personalizeText(swrveItem.accessibility_text, this.personalizationProperties);
+                    if (personalizedAltText) {
+                        element.alt = personalizedAltText;
+                    }
+                } else {
+                    element.alt = swrveItem.accessibility_text;
+                }
+            }
             container!.appendChild(element);
         }
     }
 
     private handleButton(button: ISwrveButton, parentCampaign: ISwrveCampaign): void {
-        this.closeMessage();
+        const type = String(button.type.value);
+        const action = String(button.action.value);
+        const pageId = this.getCurrentPageId();
+        const pageName = this.getCurrentPageName();
+        if (type === SwrveConstants.PAGE_LINK) {
+            const num: number = Number(action);
+            this.changePage(num, parentCampaign);
+        } else {
+            this.closeMessage();
+        }
+
         if (this.onButtonClickedCallback) {
-            this.onButtonClickedCallback(button, parentCampaign);
+            this.onButtonClickedCallback(button, parentCampaign, pageId, pageName);
         }
     }
+
+    private createContainer(name: string, color?: string): void {
+        const iamContainer = document.createElement("div");
+
+        iamContainer.id = SWRVE_IAM_CONTAINER;
+        iamContainer.className = IAM_CSS_CLASS_NAME;
+
+        iamContainer.innerHTML = this.overrideIAMStyle || DEFAULT_IAM_STYLE;
+        iamContainer.style.backgroundColor = color || "";
+
+        document.body.appendChild(iamContainer);
+    }
+
+    private changePage(newPageId: number, parentCampaign: ISwrveCampaign): void {
+        const newPageIndex = this.currentMessagePages.findIndex(page => page.page_id === newPageId);
+        if (newPageIndex !== -1) {
+            this.currentPageIndex = newPageIndex;
+            this.renderPage(newPageIndex, parentCampaign);
+        }
+    }
+
+    private renderPage(
+        pageIndex: number,
+        parentCampaign: ISwrveCampaign,
+    ): void {
+        const container = document.getElementById(SWRVE_IAM_CONTAINER);
+        if (!container) return;
+
+        // Cache and reapply style content
+        const styleContent = container.querySelector("style")?.outerHTML || "";
+        container.innerHTML = styleContent;
+
+        const page = this.currentMessagePages[pageIndex];
+        if (page) {
+            this.renderContent(page.images, page.buttons, parentCampaign);
+        }
+    }
+
+    private renderContent(
+        images: ReadonlyArray<ISwrveImage> | undefined,
+        buttons: ReadonlyArray<ISwrveButton> | undefined,
+        parentCampaign: ISwrveCampaign,
+    ): void {
+        if (images && images.length > 0) {
+            this.appendImages(images);
+        }
+        if (buttons && buttons.length > 0) {
+            const buttonElements = this.appendButtons(buttons, parentCampaign);
+            this.focusManager = this.createFocusManager(buttonElements);
+            this.focusManager.setActiveFirst();
+        }
+
+        if (this.onPageViewedCallback) {
+            const messageId = parentCampaign.messages && parentCampaign.messages[0] ? parentCampaign.messages[0].id : 0;
+            const page = this.currentMessagePages[this.currentPageIndex];
+            if (page) {
+                this.onPageViewedCallback(messageId, page.page_id, page.page_name);
+            } else {
+                this.onPageViewedCallback(messageId, 0, "");
+            }
+        }
+    }
+
+    private getCurrentPageId(): string {
+        if (!this.currentMessagePages || this.currentMessagePages.length === 0) {
+            return "";
+        }
+        if (this.currentPageIndex < 0 || this.currentPageIndex >= this.currentMessagePages.length) {
+            return "";
+        }
+        const page = this.currentMessagePages[this.currentPageIndex];
+        return page.page_id.toString();
+    }
+
+    private getCurrentPageName(): string {
+        if (!this.currentMessagePages || this.currentMessagePages.length === 0) {
+            return "";
+        }
+        if (this.currentPageIndex < 0 || this.currentPageIndex >= this.currentMessagePages.length) {
+            return "";
+        }
+        const page = this.currentMessagePages[this.currentPageIndex];
+        return page.page_name;
+    }
+
+    private personalizeButton(button: ISwrveButton): ISwrveButton {
+        if (this.personalizationProperties == null) {
+            return button;
+        }
+        let personalizedButton = button;
+        if (button.type.value === SwrveConstants.CUSTOM
+            && button.action?.value
+            && typeof button.action.value === 'string') {
+                const personalizedAction = this.personalizeText(button.action.value, this.personalizationProperties);
+                if (personalizedAction) {
+                    personalizedButton = JSON.parse(JSON.stringify(button)) as typeof button;
+                    personalizedButton.action.value = personalizedAction;
+                }
+        }
+
+        if (button.dynamic_image_url) {
+            const personalizedUrl = this.personalizeText(button.dynamic_image_url, this.personalizationProperties);
+            if (personalizedUrl) {
+                if (!personalizedButton) {
+                    personalizedButton = JSON.parse(JSON.stringify(button)) as typeof button;
+                }
+                personalizedButton.dynamic_image_url = personalizedUrl;
+            }
+        }
+
+        return personalizedButton;
+    }
+
+    private personalizeText(text: string, personalizationProperties: IDictionary<string>): string | null {
+        if (text != null) {
+            try {
+                return TextTemplating.applyTextTemplatingToString(text, personalizationProperties);
+            } catch (e) {
+                SwrveLogger.error("Could not resolve, error with personalization", e);
+            }
+        }
+        return null;
+    }
+
 }

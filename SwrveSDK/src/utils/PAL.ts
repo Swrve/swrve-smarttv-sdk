@@ -5,7 +5,7 @@ import {IPlatform} from "./platforms/IPlatform";
 import ISwrveConfig from "../Config/ISwrveConfig";
 
 export default class PAL {
-    public static platform: IPlatform;
+    public static platform: IPlatform | undefined;
 
     /**
      * determine the platform and returns Platform object
@@ -23,16 +23,16 @@ export default class PAL {
             && explicitPlatform !== null
             && explicitPlatform.toLowerCase() === "samsung-tizen")
         ) {
-            PAL.platform = (config !== undefined) ? new Tizen(config.customKeyMappingTizen) : new Tizen();
+            PAL.platform = (config !== undefined) ? new Tizen(config) : new Tizen();
         } else if (
             agent.search(/web0s/i) > -1 ||
             (explicitPlatform !== undefined
             && explicitPlatform !== null
             && explicitPlatform.toLowerCase() === "webos")
         ) {
-            PAL.platform = (config !== undefined) ? new WebOS(config.customKeyMappingWebOS) : new WebOS();
+            PAL.platform = (config !== undefined) ? new WebOS(config) : new WebOS();
         } else {
-            PAL.platform = (config !== undefined) ? new Base(config.customKeyMappingBase) : new Base();
+            PAL.platform = (config !== undefined) ? new Base(config) : new Base();
         }
 
         return PAL.platform;

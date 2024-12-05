@@ -6,24 +6,7 @@ import {generateUuid} from '../uuid';
 import {IKeyMapping } from "./IKeymapping";
 import SwrveLogger from "../SwrveLogger";
 import {IAsset} from "./IAsset";
-
-const defaultMapping: IKeyMapping = {
-  36: "Return",
-  38: "Up",
-  40: "Down",
-  37: "Left",
-  39: "Right",
-  13: "Enter",
-  65: "A",
-  66: "B",
-  67: "C",
-  68: "D",
-  8: "Back",
-  179: "Play",
-  227: "FastForward",
-  228: "Rewind",
-  112: "F1",
-};
+import ISwrveConfig from "../../Config/ISwrveConfig";
 
 const protectedKeyPrefix = /^swrve\./;
 export function clearLocalStorage(force: boolean = false): void {
@@ -47,6 +30,24 @@ if (typeof window !== "undefined" && window.localStorage && window.localStorage.
  * Base Platform (also the browser platform)
  */
 export default class BasePlatform implements IPlatform {
+  protected defaultMapping: IKeyMapping = {
+    36: "Return",
+    38: "Up",
+    40: "Down",
+    37: "Left",
+    39: "Right",
+    13: "Enter",
+    65: "A",
+    66: "B",
+    67: "C",
+    68: "D",
+    8: "Back",
+    179: "Play",
+    227: "FastForward",
+    228: "Rewind",
+    112: "F1",
+  };
+
   /** True if the platform needs a proxy. */
   protected needsProxy: boolean = true;
 
@@ -70,18 +71,25 @@ export default class BasePlatform implements IPlatform {
   protected _region: string | undefined;
   protected networkMonitorHandle?: NetworkMonitorHandle;
   protected networkListeners: NetworkListener[] = [];
-
-  protected defaultMapping: IKeyMapping;
-
-  constructor(customMapping?: IKeyMapping) {
-      this.defaultMapping = customMapping ?? defaultMapping;
+  protected config: ISwrveConfig | undefined;
+  constructor(config?: Readonly<ISwrveConfig>) {
+    if (config) {
+      this.config = config;
+      if (config.customKeyMappingBase) {
+        this.defaultMapping = config.customKeyMappingBase;
+      } 
+    }
   }
 
   public name(): IPlatformName {
-    return {
-      name: "Browser",
-      variation: "Base",
-    };
+    if (this.config?.customDeviceName) {
+      return this.config?.customDeviceName;
+    } else {
+      return {
+        name: "Browser",
+        variation: "Base",
+      };
+    }
   }
 
   public init(deviceProperties: ReadonlyArray<DevicePropertyName>): Promise<void> {
@@ -232,16 +240,20 @@ export default class BasePlatform implements IPlatform {
   }
 
   public get os(): string {
-    return navigator.platform;
+    return this.config?.customOS ?? "web";
   }
 
   public get osVersion(): string {
+    if (this.config?.customOSVersion) {
+      return this.config?.customOSVersion;
+    } else {
       const match = navigator.userAgent.match(/[^\s]+$/);
       return match ? match[0] : "Unknown version";
+    }
   }
 
   public get appStore(): string {
-    return "google";
+    return this.config?.customAppStore ?? "google";
   }
 
   public get language(): string {

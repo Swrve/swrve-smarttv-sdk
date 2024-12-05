@@ -8,6 +8,9 @@ import {
     ISwrveAsset,
     ISwrveBaseMessage,
     ISwrveEmbeddedMessage,
+    ISwrveImage,
+    ISwrveFormat,
+    ISwrveButton,
 } from "./ISwrveCampaign";
 import {StorageManager} from "../Storage/StorageManager";
 import {ICampaignDownloadData, IQACampaignTriggerEvent} from "../Events/EventTypeInterfaces";
@@ -32,8 +35,9 @@ import {
     SWRVE_CAMPAIGN_STATUS_SEEN,
     SWRVE_CAMPAIGN_STATUS_DELETED,
     CAMPAIGN_COULD_NOT_PERSONALIZE,
+    COPY_TO_CLIPBOARD,
 } from "../utils/SwrveConstants";
-import {SwrveMessageDisplayManager} from "./Messages/SwrveMessageDisplayManager";
+import {OnPageViewed, SwrveMessageDisplayManager} from "./Messages/SwrveMessageDisplayManager";
 import {AssetManager} from "./AssetManager";
 import {OnMessageListener} from "../SwrveSDK";
 import SwrveLogger from "../utils/SwrveLogger";
@@ -66,8 +70,6 @@ export class CampaignManager
 {
     private campaigns: ReadonlyArray<ISwrveCampaign> = [];
     private campaignState: {[key: string]: ICampaignState} = {};
-    private messages: ISwrveMessage[] = [];
-    private triggers: ISwrveTrigger[] = [];
     private platform: IPlatform;
 
     private readonly messageDisplayManager: SwrveMessageDisplayManager;
@@ -88,7 +90,7 @@ export class CampaignManager
     private lastShownMessageTime: number = 0;
 
     constructor(public profileManager: ProfileManager, platform: IPlatform,
-                config?: ISwrveInternalConfig, resourceManager?: ResourceManager,
+                config?: ISwrveInternalConfig, resourceManager?: ResourceManager, personalizationProperties?: IDictionary<string>,
     ) {
         this.assetManager = new AssetManager();
         this.loadStoredCampaigns(this.profileManager.currentUser.userId);
@@ -96,60 +98,67 @@ export class CampaignManager
         this.platform = platform;
     }
 
-    public storeCampaigns(response: ISwrveCampaignResourceResponse, onAssetsLoaded: OnAssetsLoaded): void {
+    public storeCampaigns(
+        response: ISwrveCampaignResourceResponse,
+        personalizationProperties: IDictionary<string>,
+        onAssetsLoaded: OnAssetsLoaded,
+    ): void {
         if (response === undefined) {
             return;
         }
-
+        
         if (response.campaigns) {
             this.handleCDN(response);
-            this.campaigns = response.campaigns.campaigns || [];
+            if (response.campaigns.campaigns) {
+                this.campaigns = this.filterUnsupportedCampaigns(response);
+            } else {
+                this.campaigns = [];
+            }
             this.parseGlobalRules(response.campaigns);
-            this.parseMessages(this.campaigns);
-            this.parseTriggers(this.campaigns);
             this.synchronizeCampaignState();
-            this.handleAssets(onAssetsLoaded);
+            this.handleAssets(personalizationProperties, onAssetsLoaded);
             StorageManager.saveData(CAMPAIGNS + this.profileManager.currentUser.userId, JSON.stringify(response));
         }
     }
 
-    public refreshAssets(onAssetsLoaded: OnAssetsLoaded): void {
-        this.handleAssets(onAssetsLoaded);
+    public refreshAssets(personalizationProperties: IDictionary<string>, onAssetsLoaded: OnAssetsLoaded): void {
+        this.handleAssets(personalizationProperties, onAssetsLoaded);
     }
 
     public resetCampaignState(clearCampaigns: boolean = true): void {
         if (clearCampaigns) {
             this.campaigns = [];
-            this.messages = [];
-            this.triggers = [];
         }
 
         this.campaignState = {};
         this.messagesShownCount = 0;
         this.lastShownMessageTime = 0;
     }
-    //this is called when the SDK is initialized and when the user is switched  
+    //this is called when the SDK is initialized and when the user is switched
     public loadStoredCampaigns(userId: string): void {
-        SwrveLogger.debug("Load stored campaigns: " + userId); 
+        SwrveLogger.debug("Load stored campaigns: " + userId);
 
         // dont clear campaigns array, they will be replaced below, if in storage for user.
         this.resetCampaignState(false);
-       
+
         const storedCampaigns = StorageManager.getData(CAMPAIGNS + userId);
         if (storedCampaigns) {
             const response: ISwrveCampaignResourceResponse = JSON.parse(storedCampaigns);
             //check it has expected structure
             if (response && response.campaigns && response.campaigns.campaigns !== undefined) {
                 this.handleCDN(response);
-                this.campaigns = response.campaigns.campaigns || [];
-        
+
+                if (response.campaigns.campaigns) {
+                    this.campaigns = this.filterUnsupportedCampaigns(response);
+                } else {
+                    this.campaigns = [];
+                }
+
                 if (this.campaigns) {
                     this.parseGlobalRules(response.campaigns);
-                    this.parseMessages(this.campaigns);
-                    this.parseTriggers(this.campaigns);
                 }
             } else {
-                SwrveLogger.debug("Campaign JSON empty, no campaigns downloaded"); 
+                SwrveLogger.debug("Campaign JSON empty, no campaigns downloaded");
             }
         } else {
             SwrveLogger.debug("Unable to load stored campaigns");
@@ -191,6 +200,14 @@ export class CampaignManager
         return campaign.messages && campaign.messages[0] ? campaign.messages[0].id : 0;
     }
 
+    public getSentPageViewEvents(): number[] {
+        return this.messageDisplayManager.getSentPageViewEvents();
+    }
+
+    public getSentNavigationEvents(): number[] {
+        return this.messageDisplayManager.getSentNavigationEvents();
+    }
+
     public getCampaignState(campaignId: string): ICampaignState {
         return this.campaignState[campaignId];
     }
@@ -203,19 +220,23 @@ export class CampaignManager
         this.onMessageListener = onMessageListener;
     }
 
+    public onPageViewed(callback: OnPageViewed): void {
+        this.messageDisplayManager.onPageViewed(callback);
+    }
+
     public onButtonClicked(callback: OnButtonClicked): void {
         this.messageDisplayManager.onButtonClicked(callback);
     }
 
     public showCampaign(
-        campaign: ISwrveCampaign, 
+        campaign: ISwrveCampaign,
         personalizationProperties?: IDictionary<string>,
         impressionCallback?: OnMessageListener,
     ): boolean {
         if (campaign.messages && campaign.messages.length > 0) {
             const message = campaign.messages[0];
             message.parentCampaign = campaign.id;
-    
+
             this.messageDisplayManager.showMessage(
               campaign.messages[0],
               campaign,
@@ -227,13 +248,13 @@ export class CampaignManager
             if (impressionCallback) {
                 impressionCallback(message);
             }
-      
+
             this.updateCampaignState(message);
             return true;
         } else if (campaign.embedded_message && campaign.embedded_message.data) {
             const embeddedMessage = campaign.embedded_message;
             embeddedMessage.parentCampaign = campaign.id;
-      
+
             if (this.onEmbeddedListener) {
               this.onEmbeddedListener(
                 campaign.embedded_message,
@@ -247,10 +268,10 @@ export class CampaignManager
     }
 
     public checkTriggers(
-        triggerName: string, 
-        payload: object, 
-        impressionCallback: OnMessageListener, 
-        qa: boolean = false, 
+        triggerName: string,
+        payload: object,
+        impressionCallback: OnMessageListener,
+        qa: boolean = false,
         personalizationProperties?: IDictionary<string>,
     ):  ICampaignTriggerStatus {
         const matchingMessages: ISwrveBaseMessage[] = [];
@@ -360,7 +381,7 @@ export class CampaignManager
                                       }
                                       break;
                                     }
-                    
+
                                     if (
                                       campaign.embedded_message &&
                                       campaign.embedded_message.data
@@ -371,7 +392,7 @@ export class CampaignManager
                                           personalizationProperties,
                                         );
                                       }
-                    
+
                                       break;
                                     }
                                   }
@@ -406,7 +427,13 @@ export class CampaignManager
     public hasFulfilledCondition(condition: ISwrveCondition, payload: any): boolean {
         switch (condition.op) {
             case "eq":
-                return payload[condition.key] === condition.value;
+                const payloadValue = payload[condition.key]?.toString()?.toLowerCase();
+                const conditionValue = condition.value?.toString()?.toLowerCase();
+                return payloadValue === conditionValue;
+            case "contains":
+                const payloadValueLowercase = payload[condition.key]?.toString()?.toLowerCase() ?? "";
+                const conditionValueLowercase = condition.value?.toString()?.toLowerCase();
+                return payloadValueLowercase.includes(conditionValueLowercase);
             case "and":
                 for (const arg of condition.args) {
                     if (!this.hasFulfilledCondition(arg, payload)) {
@@ -414,6 +441,13 @@ export class CampaignManager
                     }
                 }
                 return true;
+            case "or":
+                for (const arg of condition.args) {
+                    if (this.hasFulfilledCondition(arg, payload)) {
+                        return true;
+                    }
+                }
+                return false;
             default:
                 if (Object.keys(condition).length === 0) {
                     return true;
@@ -442,10 +476,10 @@ export class CampaignManager
         personalizationProperties?: IDictionary<string>,
     ): ISwrveCampaign[] {
         return this.campaigns
-        .filter(campaign => 
-            (campaign.message_center && campaign.messages && campaign.messages.length > 0) || 
+        .filter(campaign =>
+            (campaign.message_center && campaign.messages && campaign.messages.length > 0) ||
             (campaign.message_center && campaign.embedded_message && campaign.embedded_message.data.length > 0) ||
-            (campaign.message_center && this.campaignState[campaign.id].status 
+            (campaign.message_center && this.campaignState[campaign.id]?.status
                 !== SWRVE_CAMPAIGN_STATUS_DELETED && this.canCampaignRender(campaign, personalizationProperties)))
                              .map(campaign => ({ ...campaign }));
     }
@@ -454,16 +488,15 @@ export class CampaignManager
         for (const parentCampaign of this.campaigns) {
             if (parentCampaign.id === message.parentCampaign!) {
                 const campaignState = this.campaignState[parentCampaign.id];
-                campaignState.impressions++;
-                campaignState.status = "seen";
-                campaignState.lastShownTime = this.getNow();
-                this.campaignState[parentCampaign.id] = campaignState;
-                
-                StorageManager.saveData(
-                  CAMPAIGN_STATE + this.profileManager.currentUser.userId,
-                  JSON.stringify(this.campaignState),
-                );
-
+                if (campaignState) {
+                    campaignState.impressions++;
+                    campaignState.status = "seen";
+                    campaignState.lastShownTime = this.getNow();
+                    this.campaignState[parentCampaign.id] = campaignState;
+                    StorageManager.saveData(CAMPAIGN_STATE + this.profileManager.currentUser.userId, JSON.stringify(this.campaignState));
+                } else {
+                    SwrveLogger.error("Campaign state not found for campaign " + parentCampaign.id);
+                }
                 this.messagesShownCount++;
             }
         }
@@ -477,19 +510,20 @@ export class CampaignManager
         this.setCampaignStatus(campaign, SWRVE_CAMPAIGN_STATUS_DELETED);
     }
 
-    private setCampaignStatus(
-        campaign: ISwrveCampaign,
-        newStatus: CampaignStatus,
-    ): void {
-        if (campaign) {
-        const campaignState = this.campaignState[campaign.id];
-        campaignState.status = newStatus;
-        this.campaignState[campaign.id] = campaignState;
+    public isMessageShowing(): boolean {
+        return this.messageDisplayManager?.isIAMShowing() ?? false;
+    }
 
-        StorageManager.saveData(
-            CAMPAIGN_STATE + this.profileManager.currentUser.userId,
-            JSON.stringify(this.campaignState),
-        );
+    private setCampaignStatus(campaign: ISwrveCampaign, newStatus: CampaignStatus): void {
+        if (campaign) {
+            const campaignState = this.campaignState[campaign.id];
+            if (campaignState) {
+                campaignState.status = newStatus;
+                this.campaignState[campaign.id] = campaignState;
+                StorageManager.saveData(CAMPAIGN_STATE + this.profileManager.currentUser.userId, JSON.stringify(this.campaignState));
+            } else {
+                SwrveLogger.error("Campaign state not found for campaign " + campaign.id);
+            }
         }
     }
 
@@ -525,8 +559,8 @@ export class CampaignManager
     }
 
     private applyCampaignRules(
-        triggerName: string, 
-        parentCampaign: ISwrveCampaign, 
+        triggerName: string,
+        parentCampaign: ISwrveCampaign,
         personalizationProperties?: IDictionary<string>,
     ): ICampaignRuleStatus {
         const rules = parentCampaign.rules;
@@ -547,7 +581,7 @@ export class CampaignManager
             };
         }
 
-        if (rules.hasOwnProperty("dismiss_after_views") && campaignState.impressions >= rules.dismiss_after_views) {
+        if (rules.hasOwnProperty("dismiss_after_views") && campaignState?.impressions >= rules.dismiss_after_views) {
             const message = "{Campaign throttle limit} Campaign " + parentCampaign.id
                           + " has been shown " + parentCampaign.rules.dismiss_after_views + " times already";
             return {
@@ -556,8 +590,8 @@ export class CampaignManager
             };
         }
 
-        const lastShown = campaignState.lastShownTime + (rules.min_delay_between_messages * 1000);
-        if (campaignState.lastShownTime !== 0 && lastShown > this.getNow()) {
+        const lastShown = campaignState?.lastShownTime + (rules.min_delay_between_messages * 1000);
+        if (campaignState?.lastShownTime !== 0 && lastShown > this.getNow()) {
             const message = "{Campaign throttle limit} Too soon after last campaign. Wait until "
                           + (lastShown + rules.min_delay_between_messages);
             return {
@@ -567,8 +601,8 @@ export class CampaignManager
         }
 
         const assetsForTrigger = CampaignManager.getAllAssets(
-            [parentCampaign], 
-            this.assetManager.ImagesCDN, 
+            [parentCampaign],
+            this.assetManager.ImagesCDN,
             personalizationProperties,
         );
 
@@ -605,28 +639,12 @@ export class CampaignManager
             this._minDelay + " delay_first_message:" + this._delayFirstMessage);
     }
 
-    private parseMessages(campaigns: ReadonlyArray<ISwrveCampaign>): void {
-        campaigns.forEach( campaign => {
-            if (campaign.messages) {
-                campaign.messages.forEach(message => this.messages.push({parentCampaign: campaign.id, ...message}));
-            }
-        });
-    }
-
-    private parseTriggers(campaigns: ReadonlyArray<ISwrveCampaign>): void {
-        campaigns.forEach(campaign => {
-            if (campaign.triggers) {
-                campaign.triggers.forEach(trigger => this.triggers.push({parentCampaign: campaign.id, ...trigger}));
-            }
-        });
-    }
-
     private handleAssets(
-        onAssetsLoaded: OnAssetsLoaded, 
-        personalizationProperties?: IDictionary<string>,
+        personalizationProperties: IDictionary<string>,
+        onAssetsLoaded: OnAssetsLoaded,
     ): void {
         const assets = CampaignManager.getAllAssets(
-            this.campaigns, 
+            this.campaigns,
             this.assetManager.ImagesCDN,
             personalizationProperties,
         );
@@ -642,7 +660,7 @@ export class CampaignManager
     }
 
     public static getAllAssets(
-        campaigns: ReadonlyArray<ISwrveCampaign>, 
+        campaigns: ReadonlyArray<ISwrveCampaign>,
         cdn: string,
         personalizationProperties?: IDictionary<string>,
     ): ISwrveAsset[] {
@@ -651,16 +669,29 @@ export class CampaignManager
             for (const message of campaign.messages || []) {
                 const formats = (message.template && message.template.formats) || [];
                 for (const format of formats) {
+                    // Check images and buttons directly under format if any.
                     for (const button of format.buttons || []) {
                         assets.push(
                             new SwrveButton(button, cdn, personalizationProperties),
                         );
                     }
-
                     for (const image of format.images || []) {
                         assets.push(
                             new SwrveImage(image, cdn, personalizationProperties),
                         );
+                    }
+                    // Check images and buttons in each page within the format if any
+                    for (const page of format.pages || []) {
+                        for (const button of page.buttons || []) {
+                            assets.push(
+                                new SwrveButton(button, cdn, personalizationProperties),
+                            );
+                        }
+                        for (const image of page.images || []) {
+                            assets.push(
+                                new SwrveImage(image, cdn, personalizationProperties),
+                            );
+                        }
                     }
                 }
             }
@@ -678,11 +709,47 @@ export class CampaignManager
           this.assetManager.ImagesCDN,
           personalizationProperties,
         );
-    
+
         return assets.every((asset) => asset.canRender());
     }
 
     private getNow(): number {
         return DateHelper.nowInUtcTime();
+    }
+
+    private filterUnsupportedCampaigns(response: ISwrveCampaignResourceResponse): ISwrveCampaign[] {
+        return response.campaigns.campaigns.filter((campaign) =>
+            !campaign.messages?.some((message) =>
+                message.template.formats?.some((format) => {
+                        // each check needs to verify legacy json format (which has no concept of pages) and new format (which has pages)
+                        const hasUnsupportedFeature = this.hasMultilineTextFeature(format) ||
+                            this.hasPlainTextButtonFeature(format) ||
+                            this.hasCopyToClipboardFeature(format);
+                        if (hasUnsupportedFeature) {
+                            SwrveLogger.warn("Campaign " + campaign.id + " contains unsupported feature. Skipping.");
+                        }
+                        return hasUnsupportedFeature;
+                    },
+                ),
+            ),
+        );
+    }
+
+    private hasMultilineTextFeature(format: ISwrveFormat): boolean | undefined {
+        const isMultilineImage = (image: ISwrveImage): boolean => 'multiline_text' in image;
+        return format.images?.some(isMultilineImage) ||
+            format.pages?.some(page => page.images?.some(isMultilineImage));
+    }
+
+    private hasPlainTextButtonFeature(format: ISwrveFormat): boolean | undefined {
+        const isTextButton = (button: ISwrveButton): boolean => 'text' in button;
+        return format.buttons?.some(isTextButton) ||
+            format.pages?.some(page => page.buttons?.some(isTextButton));
+    }
+
+    private hasCopyToClipboardFeature(format: ISwrveFormat): boolean | undefined {
+        const isCopyToClipboardButton = (button: ISwrveButton): boolean => button.type?.value === COPY_TO_CLIPBOARD;
+        return format.buttons?.some(isCopyToClipboardButton) ||
+            format.pages?.some(page => page.buttons?.some(isCopyToClipboardButton));
     }
 }

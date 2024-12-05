@@ -13,7 +13,7 @@ import IdentityResponse from "../WebApi/Identity/IIdentityResponse";
 export class SwrveRestClient {
     public readonly version: number = 3;
     public readonly apiVersion: string = "8";
-    public readonly inAppVersion: string = "1";
+    public readonly inAppVersion: string = "10";
     public readonly embeddedVersion: string = "1";
 
     public constructor(

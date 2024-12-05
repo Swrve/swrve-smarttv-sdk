@@ -24,10 +24,13 @@ export const SWRVE_CAMPAIGN_STATUS_SEEN = "seen";
 export const SWRVE_CAMPAIGN_STATUS_DELETED = "deleted";
 export const SWRVE_AUTOSHOW_AT_SESSION_START_TRIGGER = "Swrve.Messages.showAtSessionStart";
 export const SWRVE_DEVICE_TYPE = "swrve.device_type";
+export const SWRVE_PAYLOAD_DEVICE_TYPE_TV = "tv";
 
 //button actions
 export const DISMISS = "DISMISS";
 export const CUSTOM = "CUSTOM";
+export const PAGE_LINK = "PAGE_LINK";
+export const COPY_TO_CLIPBOARD = "COPY_TO_CLIPBOARD";
 export const SWRVE_IAM_CONTAINER = "SwrveIAMContainer";
 
 //match to android values

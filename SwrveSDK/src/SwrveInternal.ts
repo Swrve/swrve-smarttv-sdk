@@ -2,10 +2,10 @@ import {EventFactory} from "./Events/EventFactory";
 import {ProfileManager} from "./Profile/ProfileManager";
 import PAL from "./utils/PAL";
 import {CampaignManager} from "./Campaigns/CampaignManager";
-import {ISwrveButton, 
-    ISwrveCampaign, 
-    ISwrveCampaignResourceResponse, 
-    ISwrveEmbeddedMessage, 
+import {ISwrveButton,
+    ISwrveCampaign,
+    ISwrveCampaignResourceResponse,
+    ISwrveEmbeddedMessage,
     IUserResource } from "./Campaigns/ISwrveCampaign";
 import {IPlatform, NETWORK_CONNECTED, NetworkListener} from "./utils/platforms/IPlatform";
 import {ResourceManagerInternal} from "./Resources/ResourceManagerInternal";
@@ -16,6 +16,7 @@ import {
     OnCampaignLoadedCallback,
     OnCustomButtonClicked,
     OnIAMDismissed,
+    OnIAMShown,
     OnIdentifySuccessCallback,
     OnIdentifyErrorCallback,
     OnMessageListener,
@@ -38,7 +39,7 @@ import IReward from "./WebApi/Events/IReward";
 import SwrveEvent from "./WebApi/Events/SwrveEvent";
 import DateHelper from "./utils/DateHelper";
 import { getInstallDateFormat } from "./utils/TimeHelper";
-import { CAMPAIGN_STATE } from "./utils/SwrveConstants";
+import {CAMPAIGN_STATE, SWRVE_PAYLOAD_DEVICE_TYPE_TV} from "./utils/SwrveConstants";
 import { TextTemplating } from "./utils/TextTemplating";
 import { RealTimeUserPropertiesManager } from "./UserProperties/RealTimeUserPropertiesManager";
 import { combineDictionaries } from "./utils/DictionaryHelper";
@@ -60,6 +61,7 @@ export class SwrveInternal {
     private onCampaignLoadedCallback: OnCampaignLoadedCallback | null = null;
     private onCustomButtonClickedCallback: OnCustomButtonClicked | null = null;
     private onIAMDismissedCallback: OnIAMDismissed | null = null;
+    private onIAMShownCallback: OnIAMShown | null = null;
 
     private eventLoopTimer: number = 0;
     private flushFrequency: number = 0;
@@ -81,14 +83,14 @@ export class SwrveInternal {
             //in case it was custom, set the static instance in PAl, as asset /campaign /storage managers reference it.
             PAL.platform = this.platform;
         }
-        
+
         this.loadInstallDate();
-  
+
         let lastUserId = StorageManager.getData(
             SwrveConstants.SWRVE_USER_ID,
           );
         SwrveLogger.debug(`last user ID: ${lastUserId}`);
-      
+
         if (lastUserId === null) {
             lastUserId = generateUuid().toString();
         }
@@ -98,26 +100,32 @@ export class SwrveInternal {
 
         this.resourceManager = new ResourceManagerInternal();
 
-        this.profileManager = 
-            dependencies.profileManager || 
+        this.profileManager =
+            dependencies.profileManager ||
             new ProfileManager(
-                this.config.userId, 
-                this.config.appId, 
-                this.config.apiKey, 
+                this.config.userId,
+                this.config.appId,
+                this.config.apiKey,
                 this.config.newSessionInterval,
                 );
 
+        this.realTimeUserPropertiesManager = new RealTimeUserPropertiesManager(
+            this.profileManager,
+        );
+
         this.campaignManager = dependencies.campaignManager
             || new CampaignManager(this.profileManager, this.platform, this.config, this.getResourceManager());
-        this.campaignManager.onButtonClicked((button, campaign) => this.handleButtonClicked(button, campaign));
+        this.campaignManager.onPageViewed((messageId, pageId, pageName) => {
+            this.handlePageViewed(messageId, pageId, pageName);
+        });
+        this.campaignManager.onButtonClicked((button, campaign, pageId, pageName) => {
+            this.handleButtonClicked(button, campaign, pageId, pageName);
+        });
 
         this.restClient = dependencies.restClient || new SwrveRestClient(this.config, this.profileManager, this.platform);
 
         this.evtManager = dependencies.eventManager || new EventManager(this.restClient);
-        this.realTimeUserPropertiesManager = new RealTimeUserPropertiesManager(
-            this.profileManager,
-          );         
-
+    
         this.eventFactory = new EventFactory();
 
         if (
@@ -131,7 +139,7 @@ export class SwrveInternal {
                 SwrveConstants.INVALID_FUNCTION.replace("$", "onEmbeddedMessage"),
               );
             }
-      
+
             this.campaignManager.onEmbeddedMessage(
               this.config.embeddedMessageConfig.embeddedCallback,
             );
@@ -201,12 +209,7 @@ export class SwrveInternal {
         buttonName: string,
     ): void {
         const nextSeqNum = this.profileManager.getNextSequenceNumber();
-        const evt = this.eventFactory.getButtonClickEvent(
-        nextSeqNum,
-        message.id,
-        buttonName,
-        "true",
-        );
+        const evt = this.eventFactory.getButtonClickEvent(nextSeqNum, message.id, buttonName, "true", this.platform.os, 0, "", "");
         this.queueEvent(evt);
 
         if (this.profileManager.isQAUser()) {
@@ -267,9 +270,9 @@ export class SwrveInternal {
         this.validateEventName(keyName);
 
         const evt = this.eventFactory.getNamedEvent(
-            keyName, 
-            payload, 
-            this.profileManager.getNextSequenceNumber(), 
+            keyName,
+            payload,
+            this.profileManager.getNextSequenceNumber(),
             DateHelper.nowInUtcTime());
 
         this.queueEvent(evt);
@@ -288,9 +291,9 @@ export class SwrveInternal {
         this.validateEventName(keyName);
 
         const evt = this.eventFactory.getUserUpdateWithDate(
-            keyName, 
-            date, 
-            this.profileManager.getNextSequenceNumber(), 
+            keyName,
+            date,
+            this.profileManager.getNextSequenceNumber(),
             DateHelper.nowInUtcTime());
 
         this.queueEvent(evt);
@@ -350,8 +353,8 @@ export class SwrveInternal {
         if (this.pauseSDK) return;
 
         const evt = this.eventFactory.getCurrencyGivenEvent(
-            currencyGiven, 
-            amount, 
+            currencyGiven,
+            amount,
             this.profileManager.getNextSequenceNumber(),
             DateHelper.nowInUtcTime());
 
@@ -426,7 +429,7 @@ export class SwrveInternal {
         this.evtManager.saveEventsToStorage(this.profileManager.currentUser.userId);
     }
 
-    public identify(externalUserId: string | null, 
+    public identify(externalUserId: string | null,
                     onIdentifySuccess: OnIdentifySuccessCallback,
                     onIdentifyError: OnIdentifyErrorCallback): void {
         if (this.config.managedMode) {
@@ -463,7 +466,7 @@ export class SwrveInternal {
                 || (!this.profileManager.currentUser.isAnonymous)) {
                 this.createAnonymousUser();
             }
-            
+
             const swrveId = this.profileManager.currentUser.userId;
             this.makeIdentityCall(externalUserId, previousSwrveId, swrveId, onIdentifySuccess, onIdentifyError);
         }
@@ -479,20 +482,23 @@ export class SwrveInternal {
         if (!payload) {
           payload = { embedded: "false" };
         }
-    
+
+        payload['platform'] = this.platform.os;
+        payload['deviceType'] = SWRVE_PAYLOAD_DEVICE_TYPE_TV;
+
         const evt = this.eventFactory.getImpressionEvent(
           messageId,
           nextSeqNum,
           payload,
         );
-    
+
         this.queueEvent(evt);
 
         if (this.profileManager.isQAUser()) {
             this.queueEvent(this.eventFactory.getWrappedNamedEvent(evt));
         }
       }
-    
+
     public onResourcesLoaded(callback: OnResourcesLoadedCallback): void {
         if (typeof callback !== "function") {
             SwrveLogger.error(SwrveConstants.INVALID_FUNCTION.replace("$", "onResourcesLoaded"));
@@ -535,6 +541,15 @@ export class SwrveInternal {
         }
 
         this.onCustomButtonClickedCallback = callback;
+    }
+
+    public onIAMShown(callback: OnIAMShown): void {
+        if (typeof callback !== "function") {
+            SwrveLogger.error(SwrveConstants.INVALID_FUNCTION.replace("$", "onIAMShown"));
+            return;
+        }
+
+        this.onIAMShownCallback = callback;
     }
 
     //************************************* RESOURCES *****************************************************************/
@@ -600,13 +615,18 @@ export class SwrveInternal {
             {},
             personalizationProperties,
         );
-        return this.campaignManager.showCampaign(campaign, properties, (msg) => this.queueMessageImpressionEvent(msg.id));
+        return this.campaignManager.showCampaign(campaign, properties, (msg) => {
+            this.queueMessageImpressionEvent(msg.id);
+            if (this.onIAMShownCallback) {
+                this.onIAMShownCallback();
+            }
+        });
     }
 
     public markMessageCenterCampaignAsSeen(campaign: ISwrveCampaign): void {
         this.campaignManager.markCampaignAsSeen(campaign);
     }
-    
+
     public removeMessageCenterCampaign(campaign: ISwrveCampaign): void {
         this.campaignManager.removeMessageCenterCampaign(campaign);
     }
@@ -614,7 +634,7 @@ export class SwrveInternal {
     public getCampaignState(campaignId: string): ICampaignState {
         return this.campaignManager.getCampaignState(campaignId);
     }
-    
+
     public start(userId?: string): void {
         if (this.config.managedMode) {
             if (userId) {
@@ -627,7 +647,7 @@ export class SwrveInternal {
                     }
                 } else {
                     this.stopAndSwitchUser(userId);
-                }   
+                }
             } else if (this.pauseSDK) {
                 this.pauseSDK = false;
                 this.initSDK();
@@ -653,14 +673,19 @@ export class SwrveInternal {
     }
 
     public showCampaign(
-        campaign: ISwrveCampaign, 
+        campaign: ISwrveCampaign,
         personalizationProperties?: IDictionary<string>,
     ): boolean {
         const properties = this.retrievePersonalizationProperties(
             {},
             personalizationProperties,
         );
-        return this.campaignManager.showCampaign(campaign, properties, (msg) => { this.queueMessageImpressionEvent(msg.id); });
+        return this.campaignManager.showCampaign(campaign, properties, (msg) => {
+            this.queueMessageImpressionEvent(msg.id);
+            if (this.onIAMShownCallback) {
+                this.onIAMShownCallback();
+            }
+        });
     }
 
     public shutdown(): void {
@@ -701,7 +726,7 @@ export class SwrveInternal {
             this.getRealTimeUserProperties(),
           );
         let resultProperties = {};
-    
+
         if (
           (!properties || Object.keys(properties).length === 0) &&
           this.config.personalizationProvider
@@ -721,8 +746,12 @@ export class SwrveInternal {
         } else {
           resultProperties = processedRealTimeUserProperties;
         }
-    
+
         return resultProperties;
+    }
+
+    public isMessageShowing(): boolean {
+        return this.campaignManager?.isMessageShowing() ?? false;
     }
 
     private checkTriggers(triggerName: string, payload: object): void {
@@ -753,9 +782,9 @@ export class SwrveInternal {
         }
     }
 
-    private makeIdentityCall(thirdPartyLoginId: string, 
-                             previousSwrveId: string, 
-                             swrveId: string, 
+    private makeIdentityCall(thirdPartyLoginId: string,
+                             previousSwrveId: string,
+                             swrveId: string,
                              onIdentifySuccess: OnIdentifySuccessCallback,
                              onIdentifyError: OnIdentifyErrorCallback): void {
         this.identifiedOnAnotherDevice =  false; // reset the flag
@@ -778,7 +807,7 @@ export class SwrveInternal {
                 if (this.isIdentifyCallPending()) {
                     this.cleanUpIdentifyCallPending();
                 }
-                
+
                 ProfileManager.setUserIdAsVerified(this.profileManager.currentUser.userId);
                 if (onIdentifySuccess) {
                     onIdentifySuccess(response.status, response.swrve_id);
@@ -795,9 +824,9 @@ export class SwrveInternal {
             });
     }
 
-    private handleIdentifyOffline(thirdPartyLoginId: string, 
-                                  previousSwrveId: string, 
-                                  swrveId: string, 
+    private handleIdentifyOffline(thirdPartyLoginId: string,
+                                  previousSwrveId: string,
+                                  swrveId: string,
                                   onIdentifySuccess: OnIdentifySuccessCallback,
                                   onIdentifyError: OnIdentifyErrorCallback): void {
         const existingThirdPartyLoginId = StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING_EXTERNAL_ID);
@@ -811,7 +840,7 @@ export class SwrveInternal {
             this.identifyNetworkMonitorHandle = this.platform.monitorNetwork((state: number) => {
                 if (state === NETWORK_CONNECTED) {
                     SwrveLogger.info("connected");
-                    this.makeIdentityCall(StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING_EXTERNAL_ID)!, 
+                    this.makeIdentityCall(StorageManager.getData(SwrveConstants.IDENTIFY_CALL_PENDING_EXTERNAL_ID)!,
                     previousSwrveId, swrveId, onIdentifySuccess, onIdentifyError);
                 }
             });
@@ -873,40 +902,216 @@ export class SwrveInternal {
         }
     }
 
-    private handleButtonClicked(button: ISwrveButton, parentCampaign: ISwrveCampaign): void {
-        const type = String(button.type.value);
-        const action = String(button.action.value);
-        const messageId = this.campaignManager.getCampaignVariantID(parentCampaign);
-        this.queueEvent(this.eventFactory.getButtonClickEvent(this.profileManager.getNextSequenceNumber(), 
-        messageId, button.name, "false"));
-
-        if (this.profileManager.isQAUser()) {
-            let logType;
-            switch (type) {
-                case SwrveConstants.DISMISS: logType = "dismiss"; break;
-                case SwrveConstants.CUSTOM: logType = "deeplink"; break;
-            }
-            if (logType) {
-                this.queueEvent(
-                    this.eventFactory.getQAButtonClickEvent(
-                        parentCampaign.id,
-                        messageId,
-                        button.name,
-                        logType,
-                        action || "No action",
-                        this.profileManager.getNextSequenceNumber()),
-                );
-                this.sendQueuedEvents();
-            }
+    private handlePageViewed(messageId: number, pageId: number, pageName: string): void {
+        const sentPageViewEvents = this.campaignManager.getSentPageViewEvents();
+        if (sentPageViewEvents.indexOf(pageId) > -1) {
+            return;
         }
 
-        if (type === SwrveConstants.DISMISS && this.onIAMDismissedCallback) {
+        const seqnum = this.profileManager.getNextSequenceNumber();
+        const id = messageId.toString();
+        const contextId = pageId.toString();
+        const payload: IDictionary<string> = {};
+        if (pageName && pageName.length > 0) {
+            payload['pageName'] = pageName;
+        }
+        payload['platform'] = this.platform.os;
+        payload['deviceType'] = SWRVE_PAYLOAD_DEVICE_TYPE_TV;
+
+        const event: any = this.eventFactory.getPageViewEvent(seqnum, id, contextId, payload);
+        this.queueEvent(event);
+        sentPageViewEvents.push(pageId);
+
+        if (this.profileManager.isQAUser()) {
+            const qaEvent: any = this.eventFactory.getWrappedGenericCampaignEvent(event);
+            this.queueEvent(qaEvent);
+            this.sendQueuedEvents();
+        }
+    }
+
+    private handleButtonClicked(button: ISwrveButton, parentCampaign: ISwrveCampaign, pageId: string, pageName: string): void {
+        const type = String(button.type.value);
+        const action = String(button.action.value);
+        const campaignId = parentCampaign.id;
+        const messageId = this.campaignManager.getCampaignVariantID(parentCampaign);
+        const buttonName = button.name;
+        const buttonId = button.button_id || 0;
+
+        switch (type) {
+            case SwrveConstants.DISMISS:
+                this.dismissButtonClicked(messageId, pageId, pageName, buttonName, buttonId);
+                break;
+            case SwrveConstants.CUSTOM:
+                this.customButtonClicked(campaignId, messageId, pageId, pageName, buttonName, buttonId, action);
+                break;
+            case SwrveConstants.PAGE_LINK:
+                this.pageLinkButtonClicked(messageId, pageId, pageName, buttonName, buttonId, action);
+                break;
+            case SwrveConstants.COPY_TO_CLIPBOARD:
+                this.copyToClipboard(action);
+                break;
+        }
+
+        this.queueButtonEvents(button);
+        this.queueButtonUserUpdates(button);
+    }
+
+    private dismissButtonClicked(messageId: number, pageId: string, pageName: string, buttonName: string, buttonId: number): void {
+        const seqnum = this.profileManager.getNextSequenceNumber();
+        const id = messageId.toString();
+        const contextId = pageId.toString();
+        const payload: IDictionary<string> = {};
+        if (pageName && pageName.length > 0) {
+            payload['pageName'] = pageName;
+        }
+        if (buttonName && buttonName.length > 0) {
+            payload['buttonName'] = buttonName;
+        }
+        if (buttonId > 0) {
+            payload['buttonId'] = buttonId.toString();
+        }
+        payload['platform'] = this.platform.os;
+        payload['deviceType'] = SWRVE_PAYLOAD_DEVICE_TYPE_TV;
+
+        const event: any = this.eventFactory.getDismissEvent(seqnum, id, contextId, payload);
+        this.queueEvent(event);
+
+        if (this.profileManager.isQAUser()) {
+            const qaEvent: any = this.eventFactory.getWrappedGenericCampaignEvent(event);
+            this.queueEvent(qaEvent);
+            this.sendQueuedEvents();
+        }
+
+        if (this.onIAMDismissedCallback) {
             this.onIAMDismissedCallback();
-        } else if (type === SwrveConstants.CUSTOM) {
-            if (this.onCustomButtonClickedCallback) {
-                this.onCustomButtonClickedCallback(action);
-            } else if (action.match(/^https?:\/\//)) {
-                this.platform.openLink(action);
+        }
+    }
+
+    private customButtonClicked(campaignId: number, messageId: number, pageId: string, pageName: string,
+                                buttonName: string, buttonId: number, action: string): void {
+        const seqnum = this.profileManager.getNextSequenceNumber();
+        const event: any = this.eventFactory.getButtonClickEvent(seqnum, messageId, buttonName, "false",
+            this.platform.os, buttonId, pageId, pageName);
+        this.queueEvent(event);
+
+        if (this.profileManager.isQAUser()) {
+            const qaSeqnum = this.profileManager.getNextSequenceNumber();
+            // const action = action || "No action"; // TODO: check if this is needed
+            const qaEvent: any = this.eventFactory.getQAButtonClickEvent(campaignId, messageId, buttonName, "deeplink", action, qaSeqnum);
+            this.queueEvent(qaEvent);
+            this.sendQueuedEvents();
+        }
+
+        if (this.onCustomButtonClickedCallback) {
+            this.onCustomButtonClickedCallback(action);
+        } else if (action.match(/^https?:\/\//)) {
+            this.platform.openLink(action);
+        }
+    }
+
+    private async copyToClipboard(text: string): Promise<void> {
+        if (navigator.clipboard) {
+            try {
+                await navigator.clipboard.writeText(text);
+              } catch (err) {
+                SwrveLogger.error("Clipboard API error:", err);
+              } 
+        }
+    } 
+
+    private pageLinkButtonClicked(messageId: number, pageId: string, pageName: string,
+                                  buttonName: string, buttonId: number, pageToId: string): void {
+        const sentNavigationEvents = this.campaignManager.getSentNavigationEvents();
+        if (sentNavigationEvents.indexOf(buttonId) > -1) {
+            return;
+        }
+
+        const seqnum = this.profileManager.getNextSequenceNumber();
+        const id = messageId.toString();
+        const contextId = pageId.toString();
+        const payload: IDictionary<string> = {};
+        if (pageName && pageName.length > 0) {
+            payload['pageName'] = pageName;
+        }
+        if (buttonName && buttonName.length > 0) {
+            payload['buttonName'] = buttonName;
+        }
+        if (buttonId > 0) {
+            payload['buttonId'] = buttonId.toString();
+        }
+        payload['platform'] = this.platform.os;
+        payload['deviceType'] = SWRVE_PAYLOAD_DEVICE_TYPE_TV;
+        payload['to'] = pageToId;
+
+        const event: any = this.eventFactory.getNavigationEvent(seqnum, id, contextId, payload);
+        this.queueEvent(event);
+        sentNavigationEvents.push(buttonId);
+
+        if (this.profileManager.isQAUser()) {
+            const qaEvent: any = this.eventFactory.getWrappedGenericCampaignEvent(event);
+            this.queueEvent(qaEvent);
+            this.sendQueuedEvents();
+        }
+    }
+
+    private queueButtonEvents(button: ISwrveButton): void {
+        if (button.events) {
+            button.events.forEach(event => {
+                let personalizedPayload: IDictionary<string | number> = {};
+                if (event.payload) {
+                    const personalizationProperties = this.retrievePersonalizationProperties();
+                    event.payload.forEach(item => {
+                        let personalizedValue: string | number | null = item.value;
+                        if (typeof item.value === 'string') {
+                            personalizedValue = this.getPersonalizedText(item.value, personalizationProperties);
+                        }
+                        if (personalizedValue != null) {
+                            personalizedPayload = {
+                                ...personalizedPayload,
+                                [item.key]: personalizedValue,
+                            };
+                        }
+                    });
+                }
+                const sendEvent = this.eventFactory.getNamedEvent(event.name,
+                    personalizedPayload,
+                    this.profileManager.getNextSequenceNumber(),
+                    DateHelper.nowInUtcTime(),
+                );
+                this.queueEvent(sendEvent);
+
+                if (this.profileManager.isQAUser()) {
+                    this.queueEvent( this.eventFactory.getWrappedNamedEvent(sendEvent));
+                    this.sendQueuedEvents();
+                }
+            });
+        }
+    }
+
+    private queueButtonUserUpdates(button: ISwrveButton): void {
+        if (button.user_updates) {
+            const personalizationProperties = this.retrievePersonalizationProperties();
+            let personalizedAttributes: IDictionary<string | number | boolean > = {};
+            button.user_updates.forEach(user_update => {
+                let personalizedValue: string | number | boolean | null = user_update.value;
+                if (typeof user_update.value === 'string') {
+                    personalizedValue = this.getPersonalizedText(user_update.value, personalizationProperties);
+                }
+                if (personalizedValue != null) {
+                    personalizedAttributes = {
+                        ...personalizedAttributes,
+                        [user_update.key]: personalizedValue,
+                    };
+                }
+            });
+            const userUpdateEvent = this.eventFactory.getUserUpdate(personalizedAttributes,
+                this.profileManager.getNextSequenceNumber(),
+                DateHelper.nowInUtcTime(),
+            );
+            this.queueEvent(userUpdateEvent);
+            if (this.profileManager.isQAUser()) {
+                this.queueEvent(this.eventFactory.getWrappedUserUpdate(userUpdateEvent));
+                this.sendQueuedEvents();
             }
         }
     }
@@ -932,7 +1137,11 @@ export class SwrveInternal {
 
     private handleCampaignResponse(response: IRestResponse<ISwrveCampaignResourceResponse>): void {
         if (Object.keys(response.json).length !== 0) {
-            this.campaignManager.storeCampaigns(response.json, (error?: Error) => {
+            this.handleRealTimeUserProperties(response.json);
+            const personalizationProperties = this.retrievePersonalizationProperties();
+
+            //this will also download assets, pass in up todate personalizationProperties
+            this.campaignManager.storeCampaigns(response.json, personalizationProperties, (error?: Error) => {
                 SwrveLogger.debug("ON ASSETS LOADED");
                 this.refreshAssets = false;
                 this.autoShowMessages();
@@ -941,10 +1150,10 @@ export class SwrveInternal {
                     this.onCampaignLoadedCallback(error);
                 }
             });
-            this.handleRealTimeUserProperties(response.json);
+            
             this.handleQAUser(response.json);
             this.handleFlushRefresh(response.json);
-            
+
             if (this.profileManager.isQAUser()) {
                 this.sendCampaignsDownloadedEvent();
             }
@@ -954,12 +1163,13 @@ export class SwrveInternal {
             if (this.refreshAssets) {
                 SwrveLogger.debug("Refresh Assets");
                 this.refreshAssets = false;
-                this.campaignManager.refreshAssets((error?: Error) => { 
+                const personalizationProperties = this.retrievePersonalizationProperties();
+                this.campaignManager.refreshAssets(personalizationProperties, (error?: Error) => {
                     SwrveLogger.debug("ON ASSETS LOADED");
                     //campaigns wil have already been loaded from storage on init
                     if (this.onCampaignLoadedCallback) {
                         this.onCampaignLoadedCallback(error);
-                    } 
+                    }
                 });
             }
         }
@@ -995,7 +1205,7 @@ export class SwrveInternal {
           this.checkFirstUserInitiated();
           this.autoShowEnabled = true;
         }
-  
+
         this.disableAutoShowAfterDelay();
         this.sendQueuedEvents(this.profileManager.currentUser.userId, true);
         SwrveLogger.info("Swrve Config: ", this.config);
@@ -1109,7 +1319,7 @@ export class SwrveInternal {
 
     private queueDeviceProperties(): void {
         const deviceProperties = queryDeviceProperties(this.platform, this.profileManager, this.installDate);
-        const evt = this.eventFactory.getDeviceUpdate(deviceProperties, 
+        const evt = this.eventFactory.getDeviceUpdate(deviceProperties,
             this.profileManager.getNextSequenceNumber(),
             DateHelper.nowInUtcTime());
 

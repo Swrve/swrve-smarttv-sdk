@@ -57,8 +57,19 @@ export interface ISwrveConditionEq {
     value: string;
 }
 
+export interface ISwrveConditionContains {
+    op: "contains";
+    key: string;
+    value: string;
+}
+
 export interface ISwrveConditionAnd {
     op: "and";
+    args: ReadonlyArray<ISwrveCondition>;
+}
+
+export interface ISwrveConditionOr {
+    op: "or";
     args: ReadonlyArray<ISwrveCondition>;
 }
 
@@ -66,7 +77,7 @@ export interface ISwrveConditionEmpty {
     op?: undefined;
 }
 
-export type ISwrveCondition = ISwrveConditionEq | ISwrveConditionAnd | ISwrveConditionEmpty;
+export type ISwrveCondition = ISwrveConditionEq | ISwrveConditionContains | ISwrveConditionAnd | ISwrveConditionOr | ISwrveConditionEmpty;
 
 export interface ISwrveCampaignRule
 {
@@ -113,6 +124,14 @@ export interface ISwrveFormat
     scaled_from: string;
     scale: number;
     color?: string;
+    pages?: Array<{
+        page_id: number;
+        page_name: string;
+        swipe_backward: number;
+        swipe_forward: number;
+        images: ReadonlyArray<ISwrveImage>;
+        buttons: ReadonlyArray<ISwrveButton>;
+    }>;
 }
 
 export interface ISwrveSize
@@ -149,6 +168,28 @@ export interface ISwrveButton
     image_up: ISwrveValue;
     dynamic_image_url?: string;
     text?: ISwrveValue;
+    button_id?: number;
+    events?: ReadonlyArray<IButtonCaptureEvent>;
+    user_updates?: ReadonlyArray<IButtonCaptureUserEvent>;
+    accessibility_text?: string;
+}
+
+export interface IButtonCaptureEvent
+{
+    name: string;
+    payload?: ReadonlyArray<IPayloadItem>;
+}
+
+export interface IPayloadItem
+{
+    key: string;
+    value: string | number;
+}
+
+export interface IButtonCaptureUserEvent
+{
+    key: string;
+    value: string | number | boolean;
 }
 
 export interface ISwrveImage
@@ -165,4 +206,5 @@ export interface ISwrveImage
     h: ISwrveValue;
     dynamic_image_url?: string;
     text?: ISwrveValue;
+    accessibility_text?: string;
 }

@@ -6,8 +6,17 @@ import ISessionStartEvent from "./ISessionStartEvent";
 import IUserUpdateEvent from "./IUserUpdateEvent";
 import QAEvent from "./QA/QAEvent";
 import IDeviceUpdateEvent from "./IDeviceUpdateEvent";
+import IGenericCampaignEvent from "./IGenericCampaignEvent";
 
-type SwrveEvent = QAEvent | ICurrencyGivenEvent | IIAPEvent | INamedEvent |
-    IPurchaseEvent | ISessionStartEvent | IUserUpdateEvent | IDeviceUpdateEvent;
+type SwrveEvent =
+    QAEvent
+    | ICurrencyGivenEvent
+    | IIAPEvent
+    | INamedEvent
+    | IPurchaseEvent
+    | ISessionStartEvent
+    | IUserUpdateEvent
+    | IDeviceUpdateEvent
+    | IGenericCampaignEvent;
 
 export default SwrveEvent;

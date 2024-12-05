@@ -1,7 +1,7 @@
 import {ISwrveInternalConfig, SwrveStack} from "./ISwrveInternalConfig";
 import { ISwrveEmbeddedMessage } from "../Campaigns/ISwrveCampaign";
 import IDictionary from "../utils/IDictionary";
-import { IPlatform } from "../utils/platforms/IPlatform";
+import { IPlatform, IPlatformName } from "../utils/platforms/IPlatform";
 import { IKeyMapping } from "../utils/platforms/IKeymapping";
 
 export declare type OnEmbeddedMessageListener = (msg: ISwrveEmbeddedMessage, personalizationProperties?: IDictionary<string>) => void;
@@ -30,6 +30,10 @@ export default interface ISwrveConfig {
     customKeyMappingWebOS?: IKeyMapping;
     customKeyMappingBase?: IKeyMapping;
     customPlatform?: IPlatform;
+    customOSVersion?: string;
+    customOS?: string;
+    customDeviceName?: IPlatformName;
+    customAppStore?: string;
 }
 
 export interface ICSSStyle {

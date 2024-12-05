@@ -8,5 +8,5 @@ export default interface INamedEvent {
 
     // “[A payload] is restricted to containing strings or integers”
     // https://docs.swrve.com/developer-documentation/api-guides/events-api-payloads-guide/
-    readonly payload?: IDictionary<string | number>;
+    readonly payload?: IDictionary<string | number | undefined>;
 }

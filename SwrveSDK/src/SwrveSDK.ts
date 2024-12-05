@@ -19,11 +19,12 @@ export type GetResourcesCallback = (resources: ReadonlyArray<IUserResource>) => 
 export type GetUserResourcesDiffCallback = (oldDictionary: IDictionary<IUserResource>,
                                             newDictionary: IDictionary<IUserResource>,
                                             json: any) => any;
-export type OnIdentifySuccessCallback = (status: string, 
+export type OnIdentifySuccessCallback = (status: string,
                                          swrveUserId: string) => void;
 export type OnIdentifyErrorCallback = (error: string) => void;
 export type OnMessageListener = (msg: ISwrveBaseMessage) => void;
 export type OnIAMDismissed = () => void;
+export type OnIAMShown = () => void;
 export type OnCustomButtonClicked = (customString: string) => void;
 
 export class SwrveSDK {
@@ -87,6 +88,10 @@ export class SwrveSDK {
 
     public static onCustomButtonClicked(callback: OnCustomButtonClicked): void {
         SwrveSDK.checkInstance().onCustomButtonClicked(callback);
+    }
+
+    public static onIAMShown(callback: OnIAMShown): void {
+        SwrveSDK.checkInstance().onIAMShown(callback);
     }
 
     //******************************** Accessor methods *********************************************//
@@ -236,8 +241,12 @@ export class SwrveSDK {
         SwrveSDK.checkInstance().removeMessageCenterCampaign(campaign);
     }
 
-    public static getCampaignState(campaignId: string): ICampaignState {
+    public static getCampaignState(campaignId: string): ICampaignState | undefined {
         return SwrveSDK.checkInstance().getCampaignState(campaignId);
+    }
+
+    public static isMessageShowing(): boolean {
+        return SwrveSDK.checkInstance().isMessageShowing();
     }
 
     //*************************************** Other ************************************//

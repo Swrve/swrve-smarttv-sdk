@@ -7,5 +7,10 @@ export default interface IButtonClickedEvent{
     {
         name: string,
         embedded: string,
+        platform: string,
+        deviceType: string,
+        buttonId?: number,
+        pageName?: string,
+        contextId?: string, // pageId
     };
 }

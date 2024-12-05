@@ -8,49 +8,55 @@ import {
 } from "./IPlatform";
 import { IKeyMapping } from "./IKeymapping";
 import SwrveLogger from "../SwrveLogger";
+import ISwrveConfig from "../../Config/ISwrveConfig";
 
 /**
  * Samsung platform
  */
 export default class SamsungPlatform extends BasePlatform {
-    protected tizenKeyMapping: IKeyMapping;
+    protected tizenKeyMapping: IKeyMapping = {
+        38: "Up",
+        40: "Down",
+        37: "Left",
+        39: "Right",
+        13: "Enter",
+        403: "ColorF0Red",
+        404: "B",
+        405: "C",
+        406: "D",
+        10009: "Back",
+        415: "Play",
+        417: "FastForward",
+        412: "Rewind",
+        413: "Stop",
+        10252: "PlayPause",
+        19: "Pause",
+        65376: "Done",
+        65385: "Cancel",
+    };
 
-    constructor(customKeyMapping?: IKeyMapping) {
+    constructor(config?: Readonly<ISwrveConfig>) {
         super();
         // this platform does not need a proxy.
         this.needsProxy = false;
-        
-        if (customKeyMapping) {
-            this.tizenKeyMapping = customKeyMapping;
-        } else {
-            this.tizenKeyMapping = {
-                38: "Up",
-                40: "Down",
-                37: "Left",
-                39: "Right",
-                13: "Enter",
-                403: "ColorF0Red",
-                404: "B",
-                405: "C",
-                406: "D",
-                10009: "Back",
-                415: "Play",
-                417: "FastForward",
-                412: "Rewind",
-                413: "Stop",
-                10252: "PlayPause",
-                19: "Pause",
-                65376: "Done",
-                65385: "Cancel",
-            };
+       
+        if (config) {
+            this.config = config;
+            if (config.customKeyMappingTizen) {
+                this.tizenKeyMapping = config.customKeyMappingTizen;
+            } 
         }
     }
 
     public name(): IPlatformName {
-        return {
-            name: "Samsung",
-            variation: "Tizen",
-        };
+        if (this.config?.customDeviceName) {
+            return this.config?.customDeviceName;
+        } else {
+            return {
+                name: "Samsung",
+                variation: "Tizen",
+            };
+        }
     }
 
     public exit(toMenu: boolean = false): void {
@@ -110,14 +116,18 @@ export default class SamsungPlatform extends BasePlatform {
     }
 
     public get os(): string {
-        return "tizen";
+        return this.config?.customOS ?? "tizen";
     }
 
     public get osVersion(): string {
-        if (this._osVersion === undefined) {
-            this._osVersion = tizen.systeminfo.getCapability("http://tizen.org/feature/platform.version");
+        if (this.config?.customOSVersion) {
+            return this.config?.customOSVersion;
+          } else {
+            if (this._osVersion === undefined) {
+                this._osVersion = tizen.systeminfo.getCapability("http://tizen.org/feature/platform.version");
+            }
+            return this._osVersion || "";
         }
-        return this._osVersion || "";
     }
 
     public get language(): string {
@@ -129,7 +139,7 @@ export default class SamsungPlatform extends BasePlatform {
     }
 
     public get appStore(): string {
-        return "tizen";
+        return this.config?.customAppStore ?? "tizen";
     }
 
     public openLink(link: string): void {

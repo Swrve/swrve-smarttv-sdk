@@ -1,6 +1,6 @@
 import { APP_ID_ERROR } from "../utils/SwrveConstants";
 import { IKeyMapping } from "../utils/platforms/IKeymapping";
-import { IPlatform } from "../utils/platforms/IPlatform";
+import { IPlatform, IPlatformName } from "../utils/platforms/IPlatform";
 import {ICSSStyle, ISwrveEmbeddedMessageConfig, OnPersonalizationProvider} from "./ISwrveConfig";
 
 export type SwrveStack = "us" | "eu";
@@ -30,6 +30,10 @@ export interface ISwrveInternalConfig
     readonly customKeyMappingTizen?: IKeyMapping;
     readonly customKeyMappingWebOS?: IKeyMapping;
     readonly customKeyMappingBase?: IKeyMapping;
+    readonly customOSVersion?: string;
+    readonly customOS?: string;
+    readonly customDeviceName?: IPlatformName;
+    readonly customAppStore?: string;
 }
 
 export function validateConfig(config: ISwrveInternalConfig): void {

@@ -22,6 +22,9 @@ import IQACurrencyGivenEvent from "../WebApi/Events/QA/IQACurrencyGivenEvent";
 import IButtonClickedEvent from "../WebApi/Events/IButtonClickedEvent";
 import IQAButtonClickedEvent from "../WebApi/Events/QA/IQAButtonClickedEvent";
 import DateHelper from "../utils/DateHelper";
+import {SWRVE_PAYLOAD_DEVICE_TYPE_TV} from "../utils/SwrveConstants";
+import IGenericCampaignEvent from "../WebApi/Events/IGenericCampaignEvent";
+import IQAGenericCampaignEvent from "../WebApi/Events/QA/IQAGenericCampaignEvent";
 
 export class EventFactory {
     /************************ Named Event ***********************************************************/
@@ -39,14 +42,41 @@ export class EventFactory {
                 type: "event",
                 parameters: {
                     name: event.name,
-                    payload: event.payload,
                 },
+                payload: JSON.stringify(event.payload),
                 seqnum: event.seqnum,
                 client_time: event.time,
             },
             type: "qa_log_event",
             time: event.time,
             log_type: "event",
+        };
+    }
+
+    /************************ Generic Campaign Event ***********************************************************/
+    public getGenericCampaignEvent(seqnum: number, campaignType: string, actionType: string,
+                                   id: string, contextId: string, payload: IDictionary<string>): IGenericCampaignEvent {
+        return {type: "generic_campaign_event", time: DateHelper.nowInUtcTime(), seqnum, campaignType, actionType, id, contextId, payload};
+    }
+
+    public getWrappedGenericCampaignEvent(event: IGenericCampaignEvent): IQAGenericCampaignEvent {
+        return {
+            time: DateHelper.nowInUtcTime(),
+            type: "qa_log_event",
+            log_source: "sdk",
+            log_type: "event",
+            log_details: {
+                type: "generic_campaign_event",
+                seqnum: event.seqnum,
+                client_time: event.time,
+                payload: JSON.stringify(event.payload),
+                parameters: {
+                    campaignType: event.campaignType,
+                    actionType: event.actionType,
+                    id: event.id,
+                    contextId: event.contextId,
+                },
+            },
         };
     }
 
@@ -294,10 +324,17 @@ export class EventFactory {
         };
     }
 
-    /************************ Button Click Event ***********************************************************/
+    /************************ Message Events ***********************************************************/
 
-    public getButtonClickEvent(seqnum: number, messageId: number, name: string, embedded: string): IButtonClickedEvent {
-        return {
+    public getButtonClickEvent(seqnum: number,
+                               messageId: number,
+                               name: string,
+                               embedded: string,
+                               platform: string,
+                               buttonId: number,
+                               pageId: string,
+                               pageName: string): IButtonClickedEvent {
+        const event: IButtonClickedEvent = {
             type: "event",
             time: DateHelper.nowInUtcTime(),
             seqnum,
@@ -305,8 +342,21 @@ export class EventFactory {
             payload: {
                 name,
                 embedded,
+                platform,
+                deviceType: SWRVE_PAYLOAD_DEVICE_TYPE_TV,
             },
         };
+
+        if (buttonId ?? 0 > 0) {
+            event.payload.buttonId = buttonId;
+        }
+        if (pageId && pageId.length > 0) {
+            event.payload.contextId = pageId;
+        }
+        if (pageName && pageName.length > 0) {
+            event.payload.pageName = pageName;
+        }
+        return event;
     }
 
     public getQAButtonClickEvent(campaign_id: number, variant_id: number, button_name: string, action_type: string,
@@ -327,8 +377,6 @@ export class EventFactory {
         };
     }
 
-    /************************ QA Only Events ***********************************************************/
-
     public getImpressionEvent(messageId: number, seqnum: number, payload?: IDictionary<string | number>): INamedEvent {
         return {
             type: "event",
@@ -338,6 +386,20 @@ export class EventFactory {
             payload,
         };
     }
+
+    public getPageViewEvent(seqnum: number, id: string, contextId: string, payload: IDictionary<string>): IGenericCampaignEvent {
+        return this.getGenericCampaignEvent(seqnum, "iam", "page_view", id, contextId, payload);
+    }
+
+    public getNavigationEvent(seqnum: number, id: string, contextId: string, payload: IDictionary<string>): IGenericCampaignEvent {
+        return this.getGenericCampaignEvent(seqnum, "iam", "navigation", id, contextId, payload);
+    }
+
+    public getDismissEvent(seqnum: number, id: string, contextId: string, payload: IDictionary<string>): IGenericCampaignEvent {
+        return this.getGenericCampaignEvent(seqnum, "iam", "dismiss", id, contextId, payload);
+    }
+
+    /************************ QA Only Events ***********************************************************/
 
     public getCampaignsDownloadedEvent(seqnum: number,
                                        campaignList: ReadonlyArray<ICampaignDownloadData>): ICampaignsDownloadedEvent {
@@ -353,6 +415,7 @@ export class EventFactory {
         };
     }
 
+    // getCampaignTriggeredEvent is not actually sent to server, but is used to create a wrapped qa_log_event which is sent to server
     public getCampaignTriggeredEvent(
         event_name: string, event_payload: object, reason: string, displayed: string, campaigns: IQACampaignTriggerEvent[] = [],
     ): IQATriggerReport {

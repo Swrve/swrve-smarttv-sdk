@@ -8,42 +8,47 @@ import {
     NETWORK_CONNECTED,
 } from "./IPlatform";
 import SwrveLogger from "../SwrveLogger";
+import ISwrveConfig from "../../Config/ISwrveConfig";
 
 export default class WebOSPlatform extends BasePlatform {
+    protected webOSKeyMapping: IKeyMapping = {
+        36: "Return",
+        38: "Up",
+        40: "Down",
+        37: "Left",
+        39: "Right",
+        13: "Enter",
+        8: "Return",
+        413: "Stop",
+        417: "FastForward",
+        412: "Rewind",
+        415: "Play",
+        19: "Pause",
+        461: "Back",
+    };
 
-    protected webOSKeyMapping: IKeyMapping;
-
-    constructor(customKeyMapping?: IKeyMapping) {
+    constructor(config?: Readonly<ISwrveConfig>) {
         super();
         // this platform does not need a proxy.
         this.needsProxy = false;
-        
-        if (customKeyMapping) {
-            this.webOSKeyMapping = customKeyMapping;
-        } else {
-            this.webOSKeyMapping = {
-                36: "Return",
-                38: "Up",
-                40: "Down",
-                37: "Left",
-                39: "Right",
-                13: "Enter",
-                8: "Return",
-                413: "Stop",
-                417: "FastForward",
-                412: "Rewind",
-                415: "Play",
-                19: "Pause",
-                461: "Back",
-            };
+
+        if (config) {
+            this.config = config;
+            if (config.customKeyMappingWebOS) {
+                this.webOSKeyMapping = config.customKeyMappingWebOS;
+            }
         }
     }
 
     public name(): IPlatformName {
-        return {
-            name: "LG",
-            variation: "webOS",
-        };
+        if (this.config?.customDeviceName) {
+            return this.config?.customDeviceName;
+        } else {
+            return {
+                name: "LG",
+                variation: "webOS",
+            };
+        }
     }
 
     public init(deviceProperties: ReadonlyArray<DevicePropertyName> = []): Promise<void> {
@@ -73,11 +78,11 @@ export default class WebOSPlatform extends BasePlatform {
     }
 
     public get appStore(): string {
-        return "lgappstv";
+        return this.config?.customAppStore ?? "lgappstv";
     }
 
     public get os(): string {
-        return "webos";
+        return this.config?.customOS ?? "webos";
     }
 
     public get model(): string {
@@ -93,15 +98,19 @@ export default class WebOSPlatform extends BasePlatform {
     }
 
     public get osVersion(): string {
-        if (this._osVersion === undefined) {
-            try {
-                const info = JSON.parse(PalmSystem.deviceInfo);
-                this._osVersion = info.platformVersion;
-            } catch (e) {
-                this._osVersion = "";
+        if (this.config?.customOSVersion) {
+            return this.config?.customOSVersion;
+          } else {
+            if (this._osVersion === undefined) {
+                try {
+                    const info = JSON.parse(PalmSystem.deviceInfo);
+                    this._osVersion = info.platformVersion;
+                } catch (e) {
+                    this._osVersion = "";
+                }
             }
+            return this._osVersion || "";
         }
-        return this._osVersion || "";
     }
 
     public getTimezone(): Promise<string> {
