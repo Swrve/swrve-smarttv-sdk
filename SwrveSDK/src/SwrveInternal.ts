@@ -125,7 +125,7 @@ export class SwrveInternal {
         this.restClient = dependencies.restClient || new SwrveRestClient(this.config, this.profileManager, this.platform);
 
         this.evtManager = dependencies.eventManager || new EventManager(this.restClient);
-    
+
         this.eventFactory = new EventFactory();
 
         if (
@@ -762,7 +762,13 @@ export class SwrveInternal {
         );
 
         const { globalStatus, campaignStatus, campaigns } = this.campaignManager.checkTriggers(
-            triggerName, payload, (msg) => this.queueMessageImpressionEvent(msg.id), qa, personalization,
+            triggerName, payload, (msg) => {
+                this.queueMessageImpressionEvent(msg.id);
+                if (this.onIAMShownCallback) {
+                    this.onIAMShownCallback();
+                }
+            },
+            qa, personalization,
         );
 
         if (qa && globalStatus.status !== SwrveConstants.CAMPAIGN_MATCH) {
@@ -1015,9 +1021,9 @@ export class SwrveInternal {
                 await navigator.clipboard.writeText(text);
               } catch (err) {
                 SwrveLogger.error("Clipboard API error:", err);
-              } 
+              }
         }
-    } 
+    }
 
     private pageLinkButtonClicked(messageId: number, pageId: string, pageName: string,
                                   buttonName: string, buttonId: number, pageToId: string): void {
@@ -1150,7 +1156,7 @@ export class SwrveInternal {
                     this.onCampaignLoadedCallback(error);
                 }
             });
-            
+
             this.handleQAUser(response.json);
             this.handleFlushRefresh(response.json);
 
