@@ -13,6 +13,7 @@ import {ICSSStyle} from "../../Config/ISwrveConfig";
 import SwrveLogger from "../../utils/SwrveLogger";
 import { TextTemplating } from "../../utils/TextTemplating";
 
+export type OnBackButtonClicked = () => void;
 export type OnButtonClicked = (button: ISwrveButton, parentCampaign: ISwrveCampaign, pageId: string, pageName: string) => void;
 export type OnPageViewed = (messageId: number, pageId: number, pageName: string) => void;
 
@@ -45,6 +46,7 @@ const defaultFocusStyle = {
 export class SwrveMessageDisplayManager {
     private screenCenterWidth: number = 0;
     private screenCenterHeight: number = 0;
+    private onBackButtonClickedCallback: OnBackButtonClicked | null = null;
     private onButtonClickedCallback: OnButtonClicked | null = null;
     private onPageViewedCallback: OnPageViewed | null = null;
     private isOpen: boolean = false;
@@ -114,6 +116,10 @@ export class SwrveMessageDisplayManager {
         this.onButtonClickedCallback = callback;
     }
 
+    public onBackButtonClicked(callback: OnBackButtonClicked): void {
+        this.onBackButtonClickedCallback = callback;
+    }
+
     public isIAMShowing(): boolean {
         return this.isOpen;
     }
@@ -148,6 +154,9 @@ export class SwrveMessageDisplayManager {
         const key = this.keymap[ev.keyCode];
         if (key === "Back") {
             this.closeMessage();
+            if (this.onBackButtonClickedCallback) {
+                this.onBackButtonClickedCallback();
+            }
         } else if (key && this.focusManager) {
             this.focusManager.onKeyPress(key);
         }

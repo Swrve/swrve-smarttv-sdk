@@ -42,7 +42,7 @@ import {AssetManager} from "./AssetManager";
 import {OnMessageListener} from "../SwrveSDK";
 import SwrveLogger from "../utils/SwrveLogger";
 import {ProfileManager} from "../Profile/ProfileManager";
-import {OnButtonClicked} from "./Messages/SwrveMessageDisplayManager";
+import {OnButtonClicked, OnBackButtonClicked} from "./Messages/SwrveMessageDisplayManager";
 import {IPlatform} from "../utils/platforms/IPlatform";
 import { ISwrveInternalConfig } from "../Config/ISwrveInternalConfig";
 import { ResourceManager } from "../Resources/ResourceManager";
@@ -226,6 +226,10 @@ export class CampaignManager
 
     public onButtonClicked(callback: OnButtonClicked): void {
         this.messageDisplayManager.onButtonClicked(callback);
+    }
+
+    public onBackButtonClicked(callback: OnBackButtonClicked): void {
+        this.messageDisplayManager.onBackButtonClicked(callback);
     }
 
     public showCampaign(

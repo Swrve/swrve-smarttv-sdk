@@ -22,12 +22,18 @@ export default class SwrveLogger {
     public static info(message: string, ...args: any[]): void {
         if (_level <= SwrveLogger.INFO) {
             console.log(message, ...args);
+            if (_onLoggerEvent) {
+                _onLoggerEvent(message, SwrveLogger.INFO);
+            }
         }
     }
 
     public static debug(message: string, ...args: any[]): void {
         if (_level <= SwrveLogger.DEBUG) {
             console.log('DEBUG:', message, ...args);
+            if (_onLoggerEvent) {
+                _onLoggerEvent(message, SwrveLogger.DEBUG);
+            }
         }
     }
 
@@ -38,6 +44,13 @@ export default class SwrveLogger {
             return _level = level;
         }
     }
+
+    public static OnLogEvent(callback: OnLoggerEvent): void {
+        _onLoggerEvent = callback;
+    }
 }
 
+export type OnLoggerEvent = (message: string, level?: number) => void;
+
 let _level: number = SwrveLogger.ERROR;
+let _onLoggerEvent: OnLoggerEvent | null = null;

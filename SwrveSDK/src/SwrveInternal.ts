@@ -122,6 +122,12 @@ export class SwrveInternal {
             this.handleButtonClicked(button, campaign, pageId, pageName);
         });
 
+        this.campaignManager.onBackButtonClicked(() => {
+            if (this.onIAMDismissedCallback) {
+                this.onIAMDismissedCallback();
+            }
+        });
+
         this.restClient = dependencies.restClient || new SwrveRestClient(this.config, this.profileManager, this.platform);
 
         this.evtManager = dependencies.eventManager || new EventManager(this.restClient);

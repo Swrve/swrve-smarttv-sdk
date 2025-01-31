@@ -54,6 +54,8 @@ export class SwrveRestClient {
             this.config.apiUrl == null ? `https://${appId}.${stack}.swrve.com/api/1/user_content?` : this.config.apiUrl;
         const query = this.getQueryString(this.profileManager.currentUser.etag);
 
+        SwrveLogger.debug("campaignsAndResourcesUrl: " + url + query);
+
         return this.fetch(url + query)
             .then((response) =>
                 response.json().then((json) => ({
