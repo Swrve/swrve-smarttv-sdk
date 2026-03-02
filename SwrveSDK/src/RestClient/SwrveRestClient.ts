@@ -57,12 +57,29 @@ export class SwrveRestClient {
         SwrveLogger.debug("campaignsAndResourcesUrl: " + url + query);
 
         return this.fetch(url + query)
-            .then((response) =>
-                response.json().then((json) => ({
-                    json,
-                    etag: response.headers.get("ETag"),
-                })),
-            )
+            .then((response) => {
+                if (response && response.ok) {
+                    return response.json().then((json) => ({
+                        json,
+                        etag: response.headers.get("ETag"),
+                    }));
+                }
+
+                return response
+                    .json()
+                    .then((body: { message?: string; status?: number }) => {
+                        const error = new Error(body?.message || "Request failed") as Error & {
+                            status?: number | null;
+                            body?: { message?: string; status?: number } | null;
+                        };
+                        error.status = response ? response.status : null;
+                        error.body = body ?? null;
+                        throw error;
+                    })
+                    .catch((error) => {
+                        throw error;
+                    });
+            })
             .catch((error) => {
                 throw error;
             });
@@ -92,11 +109,15 @@ export class SwrveRestClient {
                 if (response && response.ok) {
                     return response.json();
                 } else {
-                    throw new Error("Error " + response + " statusText:" + (response && response.statusText));
+                    const theError = new Error(response.status.toString()) as Error & {
+                        status?: number | null;
+                    };
+                    theError.status = response ? response.status : null;
+                    throw theError;
                 }
             })
             .catch((error) => {
-                SwrveLogger.debug(error);
+                SwrveLogger.debug(String(error));
                 throw error;
             });
     }

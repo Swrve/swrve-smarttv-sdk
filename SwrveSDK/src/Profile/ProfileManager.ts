@@ -4,12 +4,13 @@ import {IQAUser} from "../Campaigns/ISwrveCampaign";
 import {StorageManager} from "../Storage/StorageManager";
 import SwrveLogger from "../utils/SwrveLogger";
 import {generateUuid} from "../utils/uuid";
-import { SWRVE_USER_ID } from "../utils/SwrveConstants";
+import { SWRVE_USER_ID, SwrveTrackingState, SwrveTrackingStates, TRACKING_STATE } from "../utils/SwrveConstants";
 import DateHelper from "../utils/DateHelper";
 
 export class ProfileManager
 {
     private _currentUser: IUser;
+    private trackingState: SwrveTrackingState = SwrveTrackingStates.UNKNOWN;
     constructor(
         public userId: string,
         private readonly appId: number, 
@@ -25,6 +26,11 @@ export class ProfileManager
         } else {
             this._currentUser = {userId, sessionToken: session_token, sessionStart: DateHelper.nowInUtcTime(),
                 isQAUser: false, nextSeqNum: 0, firstUse: 0, lastSessionEnd: 0, isAnonymous: true};
+        }
+
+        const storedTrackingState = StorageManager.getData(TRACKING_STATE);
+        if (storedTrackingState && this.isValidTrackingState(storedTrackingState)) {
+            this.trackingState = storedTrackingState as SwrveTrackingState;
         }
 
         StorageManager.saveData(userId, JSON.stringify(this._currentUser));
@@ -76,6 +82,16 @@ export class ProfileManager
 
     public static getStoredUserId(): string | null {
         return StorageManager.getData(SWRVE_USER_ID);
+    }
+
+    public getTrackingState(): SwrveTrackingState {
+        return this.trackingState;
+    }
+
+    public setTrackingState(trackingState: SwrveTrackingState): void {
+        this.trackingState = trackingState;
+        StorageManager.saveData(TRACKING_STATE, trackingState);
+        SwrveLogger.info("SwrveSDK: trackingState is set to: " + trackingState);
     }
 
     public static isUserIdVerified(userId: string): boolean {
@@ -132,7 +148,7 @@ export class ProfileManager
     public clearQAUser(): void {
         this.currentUser.isQAUser = false;
         StorageManager.saveData(this._currentUser.userId, JSON.stringify(this._currentUser));
-        //dont clear the sequence number in case they come back as a QA user sometime in the future
+        //don't clear the sequence number in case they come back as a QA user sometime in the future
     }
 
     public isQAUser(): boolean {
@@ -179,5 +195,12 @@ export class ProfileManager
         } else {
           this.restoreCurrentUser(session_token, userId, DateHelper.nowInUtcTime());
         }  
+    }
+
+    private isValidTrackingState(value: string): boolean {
+        return value === SwrveTrackingStates.UNKNOWN
+            || value === SwrveTrackingStates.STARTED
+            || value === SwrveTrackingStates.EVENT_SENDING_PAUSED
+            || value === SwrveTrackingStates.STOPPED;
     }
 }

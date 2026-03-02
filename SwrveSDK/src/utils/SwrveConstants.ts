@@ -25,6 +25,8 @@ export const SWRVE_CAMPAIGN_STATUS_DELETED = "deleted";
 export const SWRVE_AUTOSHOW_AT_SESSION_START_TRIGGER = "Swrve.Messages.showAtSessionStart";
 export const SWRVE_DEVICE_TYPE = "swrve.device_type";
 export const SWRVE_PAYLOAD_DEVICE_TYPE_TV = "tv";
+export const SWRVE_INIT_MODE = "swrve.sdk_init_mode";
+export const SWRVE_TRACKING_STATE = "swrve.tracking_state";
 
 //button actions
 export const DISMISS = "DISMISS";
@@ -52,14 +54,20 @@ export const CAMPAIGN_COULD_NOT_PERSONALIZE = 11;
 export const CAMPAIGN_STATE = "campaignState.";
 export const CAMPAIGNS = "campaigns.";
 export const REAL_TIME_USER_PROPERTIES = "real_time_user_properties.";
-
-//Identity
-export const EXISTING_EXTERNAL_ID_MATCHES_SWRVE_ID = "existing_external_id_with_matching_swrve_id";
 export const EXISTING_EXTERNAL_ID = "existing_external_id";
-export const NEW_EXTERNAL_ID = "new_external_id";
-export const IDENTIFY_CALL_PENDING = "identifyCallPending";
-export const IDENTIFY_CALL_PENDING_EXTERNAL_ID = "identifyCallPendingExternalID";
-export const CAMPAIGN_CALL_PENDING = "campaingCallPending";
+export const TRACKING_STATE = "trackingState";
+
+export const SwrveTrackingStates = {
+    UNKNOWN: "UNKNOWN",
+    STARTED: "STARTED",
+    EVENT_SENDING_PAUSED: "EVENT_SENDING_PAUSED",
+    STOPPED: "STOPPED",
+} as const;
+
+// Backwards-compatible value alias (non-enum).
+export const SwrveTrackingState = SwrveTrackingStates;
+
+export type SwrveTrackingState = typeof SwrveTrackingStates[keyof typeof SwrveTrackingStates];
 
 //Errors that will be communicated to the developer
 export const APP_ID_ERROR = "Error creating SDK.  The appId must be greater than 0.  "

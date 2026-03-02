@@ -6,6 +6,7 @@ import { IKeyMapping } from "../utils/platforms/IKeymapping";
 
 export declare type OnEmbeddedMessageListener = (msg: ISwrveEmbeddedMessage, personalizationProperties?: IDictionary<string>) => void;
 export declare type OnPersonalizationProvider = (eventPayload: IDictionary<string>) => IDictionary<string>;
+export declare type OnUserDisabledListener = (swrveUserId: string, externalId: string) => void;
 
 export default interface ISwrveConfig {
     appId: number;
@@ -24,8 +25,10 @@ export default interface ISwrveConfig {
     inAppMessageButtonFocusStyle?: ICSSStyle | string;
     inAppMessageStyleOverride?: string;
     managedMode?: boolean;
+    autoStartLastUser?: boolean;
     embeddedMessageConfig?: ISwrveEmbeddedMessageConfig;
     personalizationProvider?: OnPersonalizationProvider;
+    //userDisabledListener?: OnUserDisabledListener;
     customKeyMappingTizen?: IKeyMapping;
     customKeyMappingWebOS?: IKeyMapping;
     customKeyMappingBase?: IKeyMapping;
@@ -55,6 +58,7 @@ export function configWithDefaults(config: ISwrveConfig, lastUserId: string): IS
         newSessionInterval: config.newSessionInterval == null
             ? 1800  /** 30 minutes in seconds */
             : config.newSessionInterval,
+        autoStartLastUser: config.autoStartLastUser == null ? true : config.autoStartLastUser,
     });
 }
 

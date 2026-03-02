@@ -15,13 +15,19 @@ import {
     sdkVersion,
     SWRVE_DEVICE_NAME,
     SWRVE_DEVICE_TYPE,
+    SWRVE_INIT_MODE,
+    SWRVE_TRACKING_STATE,
 } from "./SwrveConstants";
-import {ProfileManager} from "../Profile/ProfileManager";
-import {IPlatform} from "./platforms/IPlatform";
+import { ProfileManager } from "../Profile/ProfileManager";
+import { IPlatform } from "./platforms/IPlatform";
 import IDictionary from "./IDictionary";
 
-export function queryDeviceProperties(platform: IPlatform, profileManager: ProfileManager, installDate: string):
-    IDictionary<string | number> {
+export function queryDeviceProperties(
+    platform: IPlatform,
+    profileManager: ProfileManager,
+    installDate: string,
+    trackingState: string,
+    initMode: string): IDictionary<string | number> {
     const deviceProperties: IDictionary<string | number> = {
         [SWRVE_DEVICE_ID]: platform.deviceID,
         [SWRVE_OS]: platform.os,
@@ -38,6 +44,8 @@ export function queryDeviceProperties(platform: IPlatform, profileManager: Profi
         [SWRVE_APP_STORE]: platform.appStore,
         [SWRVE_INSTALL_DATE]: installDate,
         [SWRVE_DEVICE_TYPE]: "tv",
+        [SWRVE_INIT_MODE]: initMode,
+        [SWRVE_TRACKING_STATE]: trackingState,
     };
 
     return deviceProperties;

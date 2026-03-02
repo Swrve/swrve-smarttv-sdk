@@ -207,10 +207,10 @@ export class SwrveSDK {
         SwrveSDK._instance = null;
     }
 
-    public static stop(): void {
-        SwrveSDK.checkInstance().stop();
+    public static stopTracking(): void {
+        SwrveSDK.checkInstance().stopTracking();
     }
-
+    
     //*************************************** Message Center *******************************//
 
     public static getMessageCenterCampaigns(

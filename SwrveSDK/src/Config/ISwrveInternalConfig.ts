@@ -24,8 +24,10 @@ export interface ISwrveInternalConfig
     readonly inAppMessageButtonFocusStyle?: Readonly<ICSSStyle> | string;
     readonly inAppMessageStyleOverride?: string;
     readonly managedMode?: boolean;
+    readonly autoStartLastUser?: boolean;
     readonly embeddedMessageConfig?: ISwrveEmbeddedMessageConfig;
     readonly personalizationProvider?: OnPersonalizationProvider;
+    //readonly userDisabledListener?: OnUserDisabledListener;
     readonly customPlatform?: IPlatform;
     readonly customKeyMappingTizen?: IKeyMapping;
     readonly customKeyMappingWebOS?: IKeyMapping;

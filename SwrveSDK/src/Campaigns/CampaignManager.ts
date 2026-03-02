@@ -138,7 +138,7 @@ export class CampaignManager
     public loadStoredCampaigns(userId: string): void {
         SwrveLogger.debug("Load stored campaigns: " + userId);
 
-        // dont clear campaigns array, they will be replaced below, if in storage for user.
+        // don't clear campaigns array, they will be replaced below, if in storage for user.
         this.resetCampaignState(false);
 
         const storedCampaigns = StorageManager.getData(CAMPAIGNS + userId);
