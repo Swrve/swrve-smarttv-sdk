@@ -1,7 +1,7 @@
 import { APP_ID_ERROR } from "../utils/SwrveConstants";
 import { IKeyMapping } from "../utils/platforms/IKeymapping";
 import { IPlatform, IPlatformName } from "../utils/platforms/IPlatform";
-import {ICSSStyle, ISwrveEmbeddedMessageConfig, OnPersonalizationProvider} from "./ISwrveConfig";
+import {ICSSStyle, ISwrveEmbeddedMessageConfig, OnPersonalizationProvider, OnUserDisabledListener} from "./ISwrveConfig";
 
 export type SwrveStack = "us" | "eu";
 
@@ -27,7 +27,7 @@ export interface ISwrveInternalConfig
     readonly autoStartLastUser?: boolean;
     readonly embeddedMessageConfig?: ISwrveEmbeddedMessageConfig;
     readonly personalizationProvider?: OnPersonalizationProvider;
-    //readonly userDisabledListener?: OnUserDisabledListener;
+    readonly userDisabledListener?: OnUserDisabledListener;
     readonly customPlatform?: IPlatform;
     readonly customKeyMappingTizen?: IKeyMapping;
     readonly customKeyMappingWebOS?: IKeyMapping;

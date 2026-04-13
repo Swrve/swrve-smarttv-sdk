@@ -28,7 +28,7 @@ export default interface ISwrveConfig {
     autoStartLastUser?: boolean;
     embeddedMessageConfig?: ISwrveEmbeddedMessageConfig;
     personalizationProvider?: OnPersonalizationProvider;
-    //userDisabledListener?: OnUserDisabledListener;
+    userDisabledListener?: OnUserDisabledListener;
     customKeyMappingTizen?: IKeyMapping;
     customKeyMappingWebOS?: IKeyMapping;
     customKeyMappingBase?: IKeyMapping;

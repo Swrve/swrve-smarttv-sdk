@@ -6,11 +6,18 @@ import SwrveLogger from "../utils/SwrveLogger";
 import {generateUuid} from "../utils/uuid";
 import { SWRVE_USER_ID, SwrveTrackingState, SwrveTrackingStates, TRACKING_STATE } from "../utils/SwrveConstants";
 import DateHelper from "../utils/DateHelper";
+import { OnUserDisabledListener } from "../Config/ISwrveConfig";
+import { EventManager } from "../Events/EventManager";
+import { CampaignManager } from "../Campaigns/CampaignManager";
 
 export class ProfileManager
 {
     private _currentUser: IUser;
     private trackingState: SwrveTrackingState = SwrveTrackingStates.UNKNOWN;
+    private disabledUserIds: Set<string> = new Set();
+    private evtManager?: EventManager;
+    private campaignManager?: CampaignManager;
+    private stopTrackingHandler?: () => void;
     constructor(
         public userId: string,
         private readonly appId: number, 
@@ -111,6 +118,65 @@ export class ProfileManager
     public setCurrentUserAsNewAnonymousUser(): void {
         const newAnonUserId = generateUuid().toString();
         this.setCurrentUser(newAnonUserId, true);
+    }
+
+    public addNewDisabledUserId(userId: string): boolean {
+        if (this.disabledUserIds.has(userId)) {
+            SwrveLogger.debug(`Ignoring duplicate disabled user request for user id ${userId}`);
+            return false;
+        }
+        this.disabledUserIds.add(userId);
+        return true;
+    }
+
+    public isCurrentUserDisabled(): boolean {
+        return this.disabledUserIds.has(this._currentUser.userId);
+    }
+
+    public deleteUserData(userId: string): string {
+        const externalId = StorageManager.getExternalIdForSwrveId(userId);
+        StorageManager.clearUserData(userId, externalId);
+        return externalId;
+    }
+
+    public setDisableUserDependencies(
+        evtManager: EventManager,
+        campaignManager: CampaignManager,
+        stopTrackingHandler: () => void,
+    ): void {
+        this.evtManager = evtManager;
+        this.campaignManager = campaignManager;
+        this.stopTrackingHandler = stopTrackingHandler;
+    }
+
+    public handleDisableUser(
+        message: string | null | undefined,
+        disabledSwrveUserId: string,
+        onUserDisabled?: OnUserDisabledListener,
+    ): boolean {
+        if (message !== "User access has been disabled" || !disabledSwrveUserId) {
+            return false;
+        }
+
+        if (!this.addNewDisabledUserId(disabledSwrveUserId)) {
+            return true;
+        }
+
+        const externalId = this.deleteUserData(disabledSwrveUserId);
+
+        if (this.isCurrentUserDisabled()) {
+            this.evtManager?.clearQueueAndStorage(disabledSwrveUserId);
+            this.stopTrackingHandler?.();
+            SwrveLogger.warn("User is disabled, SDK will stop tracking.");
+            this.setCurrentUserAsNewAnonymousUser();
+            this.campaignManager?.resetCampaignState();
+        }
+
+        if (onUserDisabled) {
+            onUserDisabled(disabledSwrveUserId, externalId);
+        }
+
+        return true;
     }
 
     public setCurrentUser(newUserId: string, markAsAnonymous: boolean = false): void {

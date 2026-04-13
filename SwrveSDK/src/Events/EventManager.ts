@@ -4,6 +4,14 @@ import SwrveLogger from "../utils/SwrveLogger";
 import SwrveEvent from "../WebApi/Events/SwrveEvent";
 import { SwrveRestClient } from "../RestClient/SwrveRestClient";
 
+export interface ISendQueueResult {
+    success: boolean;
+    hadEvents: boolean;
+    status?: number;
+    message?: string | null;
+    response?: Response | null;
+}
+
 export class EventManager {
     public readonly MAX_QUEUE_SIZE: number = 100 * 1000;
 
@@ -38,34 +46,61 @@ export class EventManager {
         return this._queueSize;
     }
 
-    public sendQueue(userId: string): Promise<boolean> {
+    public async sendQueue(userId: string): Promise<ISendQueueResult> {
         const eventsToSend = this.getAllQueuedEvents(userId);
         this.clearStoredEvents(userId);
         this.clearQueue();
 
-        if (eventsToSend.length > 0) {
-            return this.restClient.postEvents(eventsToSend)
-                .then(response => {
-                    if (response == null || response instanceof Error) {
-                        return false;
-                    } else if (response.ok) {
-                        SwrveLogger.info("Queue posted to server");
-                        return true;
-                    } else if (response.status === 500) {
-                        throw new Error('Internal Server Error: ' + response.statusText);
-                    } else {
-                        SwrveLogger.debug("Unsuccessful send queue response", response);
-                        return false;
-                    }
-                })
-                .catch((error) => {
-                    SwrveLogger.warn("Failed to post events, saving queue for later", error);
-                    this.storeEvents([...eventsToSend, ...this.getAllQueuedEvents(userId)], userId);
-                    return false;
-                });
-        } else {
+        if (eventsToSend.length === 0) {
             SwrveLogger.info("nothing to send");
-            return Promise.resolve(false);
+            return {
+                success: false,
+                hadEvents: false,
+                response: null,
+            };
+        }
+
+        try {
+            const response = await this.restClient.postEvents(eventsToSend);
+            if (response == null || response instanceof Error) {
+                return {
+                    success: false,
+                    hadEvents: true,
+                    response: null,
+                };
+            }
+
+            if (response.ok) {
+                SwrveLogger.info("Queue posted to server");
+                return {
+                    success: true,
+                    hadEvents: true,
+                    status: response.status,
+                    response,
+                };
+            }
+
+            if (response.status === 500) {
+                throw new Error("Internal Server Error: " + response.statusText);
+            }
+
+            SwrveLogger.debug("Unsuccessful send queue response", response);
+            const failureResult = await this.captureResponse(response);
+            return {
+                success: false,
+                hadEvents: true,
+                ...failureResult,
+                response,
+            };
+        } catch (error) {
+            SwrveLogger.warn("Failed to post events, saving queue for later", error);
+            this.storeEvents([...eventsToSend, ...this.getAllQueuedEvents(userId)], userId);
+            return {
+                success: false,
+                hadEvents: true,
+                message: error instanceof Error ? error.message : null,
+                response: null,
+            };
         }
     }
 
@@ -110,5 +145,30 @@ export class EventManager {
 
     private getStorageKey(userId: string): string {
         return "events" + userId;
+    }
+
+    private captureResponse(response: any): Promise<Pick<ISendQueueResult, "status" | "message">> {
+        const status = typeof response?.status === "number" ? response.status : 0;
+        const inlineMessage = response?.body?.message || response?.message || null;
+        if (inlineMessage || typeof response?.clone !== "function") {
+            return Promise.resolve({
+                status,
+                message: inlineMessage,
+            });
+        }
+
+        return response.clone().json()
+            .then((body: any) => {
+                return {
+                    status,
+                    message: body?.message || null,
+                };
+            })
+            .catch(() => {
+                return {
+                    status,
+                    message: null,
+                };
+            });
     }
 }

@@ -51,7 +51,7 @@ export class StorageManager {
             .then(rehash => hash === rehash ? data : null);
     }
 
-        public static clearUserData(userId: string, externalId?: string | null): void {
+    public static clearUserData(userId: string, externalId?: string | null): void {
         StorageManager.clearData(userId);
         StorageManager.clearData("verified-" + userId);
         StorageManager.clearData(SwrveConstants.CAMPAIGNS + userId);

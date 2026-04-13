@@ -130,6 +130,11 @@ export class SwrveInternal {
         this.restClient = dependencies.restClient || new SwrveRestClient(this.config, this.profileManager, this.platform);
 
         this.evtManager = dependencies.eventManager || new EventManager(this.restClient);
+        this.profileManager.setDisableUserDependencies(
+            this.evtManager,
+            this.campaignManager,
+            () => this.stopTracking(),
+        );
 
         this.eventFactory = new EventFactory();
 
@@ -149,11 +154,11 @@ export class SwrveInternal {
               this.config.embeddedMessageConfig.embeddedCallback,
             );
           }
-        // if (this.config.userDisabledListener && typeof this.config.userDisabledListener !== "function") {
-        //     SwrveLogger.error(
-        //         SwrveConstants.INVALID_FUNCTION.replace("$", "userDisabledListener"),
-        //     );
-        // }
+        if (this.config.userDisabledListener && typeof this.config.userDisabledListener !== "function") {
+            SwrveLogger.error(
+                SwrveConstants.INVALID_FUNCTION.replace("$", "userDisabledListener"),
+            );
+        }
     }
 
     public init(): void {
@@ -386,8 +391,12 @@ export class SwrveInternal {
     public sendQueuedEvents(userId: string = this.profileManager.currentUser.userId, forceUpdate: boolean = false): void {
         SwrveLogger.info("SWRVE INTERNAL: SEND QUEUED EVENTS");
         if (!this.isSdkReady()) { return; }
-        this.evtManager.sendQueue(userId).then(success => {
-            if (success || forceUpdate) {
+        this.evtManager.sendQueue(userId).then(result => {
+            if (result.status === 401 && this.handleDisableUser(result.message, userId)) {
+                return;
+            }
+
+            if (result.success || forceUpdate) {
                 this.updateCampaignsAndResources(forceUpdate);
             }
         });
@@ -396,9 +405,16 @@ export class SwrveInternal {
     //******************************************** OTHER *********************************************************/
 
     public stopTracking(): void {
-        this.queueDeviceProperties();
         this.started = false;
         this.profileManager.setTrackingState(SwrveTrackingStates.STOPPED);
+
+        // Don't send device info if the user is disabled, as it will cause another 401 response.
+        if (!this.profileManager.isCurrentUserDisabled()) {
+            this.queueDeviceProperties();
+            //send directly as sendQueuedEvents will check the tracking state and not send if stopped.
+            this.evtManager.sendQueue(this.profileManager.currentUser.userId).catch(() => {});
+        }
+
         clearInterval(this.eventLoopTimer);
         this.eventLoopTimer = 0;
     }
@@ -411,14 +427,6 @@ export class SwrveInternal {
             })
             .catch((error) => {
                 SwrveLogger.warn("SwrveSDK: Get campaigns and resources failed ", String(error));
-                // const status = (error && typeof error === "object") ? (error as any).status : null;
-                // const message = (error && typeof error === "object")
-                //     ? ((error as any).body?.message || (error as any).message)
-                //     : String(error);
-                // if (status === 401 && this.handle401(message)) {
-                //     return;
-                // }
-
                 if (forceUpdate) {
                     const userId = this.profileManager.currentUser.userId;
                     this.realTimeUserPropertiesManager.loadStoredUserProperties(userId);
@@ -867,32 +875,14 @@ export class SwrveInternal {
         return swrveId;
     }
 
-    // private handle401(message: string | null | undefined): boolean {
-    //     if (message !== "User access has been disabled") {
-    //         return false;
-    //     }
+    private handleDisableUser(message: string | null | undefined, disabledSwrveUserId: string): boolean {
+        return this.profileManager.handleDisableUser(
+            message,
+            disabledSwrveUserId,
+            this.config.userDisabledListener,
+        );
+    }
 
-    //     this.stopTracking();
-    //     SwrveLogger.warn("User is disabled, SDK will stop tracking.");
-    //     const disabledSwrveUserId = this.profileManager.currentUser.userId;
-    //     const externalId = StorageManager.getExternalIdForSwrveId(disabledSwrveUserId);
-     
-    //     StorageManager.clearUserData(disabledSwrveUserId, externalId);
-    //     this.evtManager.clearQueueAndStorage(disabledSwrveUserId);
-
-    //     this.createAnonymousUser();
-
-    //     if (this.config.userDisabledListener && typeof this.config.userDisabledListener === "function") {
-    //         this.config.userDisabledListener(disabledSwrveUserId, externalId);
-    //     }
-
-    //     return true;
-    // }
-
-    // private createAnonymousUser(): void {
-    //     this.profileManager.setCurrentUserAsNewAnonymousUser();
-    //     this.campaignManager.resetCampaignState();
-    // }
     private switchUser(newUserId: string): void {
         if (this.started && newUserId === this.profileManager.currentUser.userId) {  
             if (this.eventLoopTimer === 0) {
@@ -1247,9 +1237,7 @@ export class SwrveInternal {
     }
 
     private queueEvent(event: SwrveEvent): void {
-        if (!this.isSdkReady()) { return; }
         this.evtManager.queueEvent(event);
-
         if (this.evtManager.queueSize > this.evtManager.MAX_QUEUE_SIZE) {
             this.handleSendingQueue();
         }
@@ -1353,9 +1341,8 @@ export class SwrveInternal {
         const evt = this.eventFactory.getDeviceUpdate(deviceProperties,
             this.profileManager.getNextSequenceNumber(),
             DateHelper.nowInUtcTime());
-
+        
         this.queueEvent(evt);
-
         if (this.profileManager.isQAUser()) {
             this.queueEvent(this.eventFactory.getWrappedDeviceUpdate(evt));
         }
